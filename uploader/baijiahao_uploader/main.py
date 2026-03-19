@@ -63,7 +63,7 @@ async def baijiahao_setup(account_file, handle=False):
     return True
 
 class BaiJiaHaoVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, proxy_setting=None):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, proxy_setting=None, description=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -73,6 +73,7 @@ class BaiJiaHaoVideo(object):
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
         self.proxy_setting = proxy_setting
+        self.description = description  # 作品简介（可选）
 
     async def set_schedule_time(self, page, publish_date):
         """

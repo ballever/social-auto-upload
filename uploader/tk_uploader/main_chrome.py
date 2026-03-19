@@ -71,7 +71,7 @@ async def get_tiktok_cookie(account_file):
 
 
 class TiktokVideo(object):
-    def __init__(self, title, file_path, tags, publish_date, account_file, thumbnail_path=None):
+    def __init__(self, title, file_path, tags, publish_date, account_file, thumbnail_path=None, description=None):
         self.title = title
         self.file_path = file_path
         self.tags = tags
@@ -81,6 +81,7 @@ class TiktokVideo(object):
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
         self.locator_base = None
+        self.description = description  # 作品简介（可选）
 
     async def set_schedule_time(self, page, publish_date):
         schedule_input_element = self.locator_base.get_by_label('Schedule')

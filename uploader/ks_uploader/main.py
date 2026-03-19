@@ -62,7 +62,7 @@ async def get_ks_cookie(account_file):
 
 
 class KSVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, description=None, thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -71,6 +71,8 @@ class KSVideo(object):
         self.date_format = '%Y-%m-%d %H:%M'
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
+        self.description = description  # 作品简介（可选）
+        self.thumbnail_path = thumbnail_path  # 封面图片路径（可选）
 
     async def handle_upload_error(self, page):
         kuaishou_logger.error("视频出错了，重新上传中")
@@ -158,6 +160,10 @@ class KSVideo(object):
         if retry_count == max_retries:
             kuaishou_logger.warning("超过最大重试次数，视频上传可能未完成。")
 
+        # 上传封面图片（如果提供了）
+        if self.thumbnail_path:
+            await self.set_thumbnail(page, self.thumbnail_path)
+
         # 定时任务
         if self.publish_date != 0:
             await self.set_schedule_time(page, self.publish_date)
@@ -211,3 +217,74 @@ class KSVideo(object):
         await page.keyboard.type(str(publish_date_hour))
         await page.keyboard.press("Enter")
         await asyncio.sleep(1)
+
+    async def set_thumbnail(self, page, thumbnail_path: str):
+        """设置视频封面图片"""
+        if not thumbnail_path:
+            return
+            
+        try:
+            kuaishou_logger.info('  [-] 正在设置视频封面...')
+            
+            # 尝试多种选择器来定位封面上传区域
+            cover_selectors = [
+                'div[class*="cover-upload"]',
+                'div[class*="thumbnail-upload"]',
+                'div[class*="cover"] input[type="file"]',
+                'input[type="file"][accept*="image"]',
+                'div.cover-uploader',
+                'div.upload-cover',
+                'div.cover-upload-area',
+                'div.upload-area',
+                'div[role="button"][aria-label*="封面"]',
+                'button:has-text("上传封面")',
+                'button:has-text("选择封面")',
+                'div:has-text("封面") input[type="file"]'
+            ]
+            
+            cover_found = False
+            for selector in cover_selectors:
+                try:
+                    # 等待页面稳定
+                    await page.wait_for_timeout(1000)
+                    
+                    # 检查元素是否存在
+                    locator = page.locator(selector)
+                    element_count = await locator.count()
+                    if element_count > 0:
+                        kuaishou_logger.info(f'  [-] 找到封面选择器: {selector}')
+                        
+                        if 'input[type="file"]' in selector:
+                            # 直接是文件输入框
+                            await locator.set_input_files(thumbnail_path)
+                        else:
+                            # 先点击元素，然后上传文件
+                            await locator.click()
+                            await page.wait_for_timeout(500)
+                            
+                            # 尝试找到文件输入框
+                            file_inputs = await page.locator('input[type="file"]').all()
+                            if file_inputs:
+                                # 使用第一个文件输入框
+                                await file_inputs[0].set_input_files(thumbnail_path)
+                            else:
+                                # 如果没有找到文件输入框，尝试通过文件选择器
+                                async with page.expect_file_chooser() as fc_info:
+                                    await locator.click()
+                                file_chooser = await fc_info.value
+                                await file_chooser.set_files(thumbnail_path)
+                        
+                        kuaishou_logger.info('  [+] 视频封面设置完成！')
+                        await page.wait_for_timeout(2000)  # 等待封面处理完成
+                        cover_found = True
+                        break
+                        
+                except Exception as e:
+                    kuaishou_logger.debug(f'  [-] 选择器 {selector} 失败: {e}')
+                    continue
+            
+            if not cover_found:
+                kuaishou_logger.warning('  [-] 未找到封面上传区域，跳过封面设置')
+                
+        except Exception as e:
+            kuaishou_logger.warning(f'  [-] 设置封面失败: {e}，继续发布流程')

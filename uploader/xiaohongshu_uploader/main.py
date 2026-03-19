@@ -64,7 +64,7 @@ async def xiaohongshu_cookie_gen(account_file):
 
 
 class XiaoHongShuVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None, description=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -74,6 +74,7 @@ class XiaoHongShuVideo(object):
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
         self.thumbnail_path = thumbnail_path
+        self.description = description  # 作品简介（可选）
 
     async def set_schedule_time_xiaohongshu(self, page, publish_date):
         print("  [-] 正在设置定时发布时间...")
@@ -131,32 +132,62 @@ class XiaoHongShuVideo(object):
         await page.locator("div[class^='upload-content'] input[class='upload-input']").set_input_files(self.file_path)
 
         # 等待页面跳转到指定的 URL 2025.01.08修改在原有基础上兼容两种页面
+        attempt_count = 0
         while True:
+            attempt_count += 1
+            print(f"  [=] 开始第 {attempt_count} 次检测上传状态...")
             try:
                 # 等待upload-input元素出现
+                print(f"  [=] 等待上传输入元素出现 (3秒超时)...")
                 upload_input = await page.wait_for_selector('input.upload-input', timeout=3000)
+                print(f"  [+] 找到上传输入元素!")
+
                 # 获取下一个兄弟元素
                 preview_new = await upload_input.query_selector(
                     'xpath=following-sibling::div[contains(@class, "preview-new")]')
+
                 if preview_new:
+                    print(f"  [+] 找到预览元素 preview-new!")
+
                     # 在preview-new元素中查找包含"上传成功"的stage元素
                     stage_elements = await preview_new.query_selector_all('div.stage')
-                    upload_success = False
-                    for stage in stage_elements:
-                        text_content = await page.evaluate('(element) => element.textContent', stage)
-                        if '上传成功' in text_content:
-                            upload_success = True
-                            break
-                    if upload_success:
-                        xiaohongshu_logger.info("[+] 检测到上传成功标识!")
-                        break  # 成功检测到上传成功后跳出循环
+                    print(f"  [=] 找到 {len(stage_elements)} 个 stage 元素")
+
+                    if len(stage_elements) > 0:
+                        upload_success = False
+                        for idx, stage in enumerate(stage_elements):
+                            text_content = await page.evaluate('(element) => element.textContent', stage)
+                            print(f"  [=] Stage {idx + 1} 文本内容: '{text_content.strip()}'")
+
+                            # 检测新的上传成功标识
+                            if '检测为高清视频' in text_content or '上传成功' in text_content:
+                                upload_success = True
+                                print(f"  [✓] 在 Stage {idx + 1} 中检测到上传成功标识!")
+                                break
+                            elif '上传中' in text_content:
+                                print(f"  [=] Stage {idx + 1} 显示: 上传中")
+                            elif '上传失败' in text_content:
+                                print(f"  [✗] Stage {idx + 1} 显示: 上传失败")
+                            else:
+                                print(f"  [?] Stage {idx + 1} 状态未知")
+
+                        if upload_success:
+                            xiaohongshu_logger.info("[+] 检测到上传成功标识!")
+                            break  # 成功检测到上传成功后跳出循环
+                        else:
+                            print("  [-] 未找到上传成功标识，继续等待...")
                     else:
-                        print("  [-] 未找到上传成功标识，继续等待...")
+                        print("  [-] 未找到任何 stage 元素，继续等待...")
                 else:
-                    print("  [-] 未找到预览元素，继续等待...")
-                    await asyncio.sleep(1)
+                    print("  [-] 未找到预览元素 preview-new，继续等待...")
+
+                # 等待一段时间后重新检测
+                await asyncio.sleep(1)
+
             except Exception as e:
                 print(f"  [-] 检测过程出错: {str(e)}，重新尝试...")
+                print(f"  [i] 注意: 这里的3秒超时是指等待 upload-input 元素出现的时间，不是整个上传过程的时间")
+                print(f"  [i] 如果超时，代码会继续循环重试，不会放弃上传")
                 await asyncio.sleep(0.5)  # 等待0.5秒后重新尝试
 
         # 填充标题和话题
@@ -164,22 +195,63 @@ class XiaoHongShuVideo(object):
         # 这里为了避免页面变化，故使用相对位置定位：作品标题父级右侧第一个元素的input子元素
         await asyncio.sleep(1)
         xiaohongshu_logger.info(f'  [-] 正在填充标题和话题...')
-        title_container = page.locator('div.plugin.title-container').locator('input.d-text')
+
+        # 尝试新的DOM结构定位标题输入框
+        print(f"  [=] 尝试新的DOM结构定位标题输入框")
+        # 新的DOM路径: div.publish-page-content > div.publish-page-content-base > div > div.flex > div.input > div.d-input-wrapper.d-inline-block.c-input_inner > div > input
+        title_container = page.locator('div.publish-page-content div.publish-page-content-base div.flex div.input div.d-input-wrapper.d-inline-block.c-input_inner input')
+        title_count = await title_container.count()
+        print(f"  [=] 找到 {title_count} 个标题输入框")
+
         if await title_container.count():
+            print(f"  [+] 使用新DOM结构填充标题: {self.title[:30]}")
+            await title_container.click()  # 先点击输入框
+            await asyncio.sleep(0.5)  # 等待输入框激活
             await title_container.fill(self.title[:30])
+            print(f"  [+] 标题填充完成")
         else:
-            titlecontainer = page.locator(".notranslate")
-            await titlecontainer.click()
-            await page.keyboard.press("Backspace")
-            await page.keyboard.press("Control+KeyA")
-            await page.keyboard.press("Delete")
-            await page.keyboard.type(self.title)
-            await page.keyboard.press("Enter")
-        css_selector = ".ql-editor" # 不能加上 .ql-blank 属性，这样只能获取第一次非空状态
-        for index, tag in enumerate(self.tags, start=1):
-            await page.type(css_selector, "#" + tag)
-            await page.press(css_selector, "Space")
-        xiaohongshu_logger.info(f'总共添加{len(self.tags)}个话题')
+            print(f"  [✗] 新DOM结构也无法找到标题输入框！")
+            xiaohongshu_logger.error("  [✗] 无法找到标题输入框，发布失败！")
+            print(f"  [i] 浏览器保持打开状态，方便观察问题")
+            print(f"  [i] 请手动检查页面DOM结构后关闭浏览器")
+            # 仅抛出异常，不关闭浏览器
+            raise Exception("无法找到标题输入框，发布失败")
+
+        # 填充简介和话题（共用同一个输入框）
+        # 新的DOM路径: div.publish-page-content > div.publish-page-content-base > div > div.editor-container > div.editor-content > div > div
+        css_selector = "div.publish-page-content div.publish-page-content-base div.editor-container div.editor-content div div"
+        print(f"  [=] 尝试定位简介和话题输入框: {css_selector}")
+        editor_count = await page.locator(css_selector).count()
+        print(f"  [=] 找到 {editor_count} 个输入框")
+
+        if editor_count > 0:
+            print(f"  [+] 开始填充简介和话题...")
+            # 先点击输入框确保激活
+            await page.locator(css_selector).first.click()
+            await asyncio.sleep(0.5)  # 等待输入框激活
+
+            # 先输入简介（如果有）
+            if self.description:
+                print(f"  [=] 输入简介: {self.description[:50]}...")
+                await page.type(css_selector, self.description)
+                print(f"  [+] 简介输入完成")
+
+            # 输入话题标签
+            for index, tag in enumerate(self.tags, start=1):
+                print(f"  [=] 添加话题 {index}/{len(self.tags)}: #{tag}")
+                # 如果有简介，先换行
+                if self.description or index > 1:
+                    await page.press(css_selector, "Enter")
+                await page.type(css_selector, "#" + tag)
+                await page.press(css_selector, "Space")
+            xiaohongshu_logger.info(f'总共添加{len(self.tags)}个话题')
+        else:
+            print(f"  [✗] 无法找到简介和话题输入框！")
+            xiaohongshu_logger.error("  [✗] 无法找到简介和话题输入框，发布失败！")
+            print(f"  [i] 浏览器保持打开状态，方便观察问题")
+            print(f"  [i] 请手动检查页面DOM结构后关闭浏览器")
+            # 仅抛出异常，不关闭浏览器
+            raise Exception("无法找到简介和话题输入框，发布失败")
 
         # while True:
         #     # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待

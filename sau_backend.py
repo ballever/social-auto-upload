@@ -10,8 +10,8 @@ from flask_cors import CORS
 from myUtils.auth import check_cookie
 from flask import Flask, request, jsonify, Response, render_template, send_from_directory
 from conf import BASE_DIR
-from myUtils.login import get_tencent_cookie, douyin_cookie_gen, get_ks_cookie, xiaohongshu_cookie_gen
-from myUtils.postVideo import post_video_tencent, post_video_DouYin, post_video_ks, post_video_xhs
+from myUtils.login import get_tencent_cookie, douyin_cookie_gen, get_ks_cookie, xiaohongshu_cookie_gen, bilibili_cookie_gen
+from myUtils.postVideo import post_video_tencent, post_video_DouYin, post_video_ks, post_video_xhs, post_video_bilibili
 
 active_queues = {}
 app = Flask(__name__)
@@ -47,6 +47,7 @@ def index():  # put application's code here
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'file' not in request.files:
+        print("错误: 请求中没有找到文件部分")
         return jsonify({
             "code": 400,
             "data": None,
@@ -54,19 +55,46 @@ def upload_file():
         }), 400
     file = request.files['file']
     if file.filename == '':
+        print("错误: 没有选择文件")
         return jsonify({
             "code": 400,
             "data": None,
             "msg": "No selected file"
         }), 400
     try:
+        # 打印调试信息
+        print(f"开始上传文件: {file.filename}")
+        print(f"文件大小: {file.content_length} bytes")
+
         # 保存文件到指定位置
         uuid_v1 = uuid.uuid1()
         print(f"UUID v1: {uuid_v1}")
+
+        # 检查并创建目标目录
+        video_dir = Path(BASE_DIR / "videoFile")
+        print(f"目标目录: {video_dir}")
+        print(f"目录是否存在: {video_dir.exists()}")
+
+        if not video_dir.exists():
+            print(f"目录不存在,尝试创建: {video_dir}")
+            video_dir.mkdir(parents=True, exist_ok=True)
+            print(f"目录创建完成,存在: {video_dir.exists()}")
+
         filepath = Path(BASE_DIR / "videoFile" / f"{uuid_v1}_{file.filename}")
+        print(f"完整文件路径: {filepath}")
+
+        # 保存文件
         file.save(filepath)
+        print(f"文件保存成功: {filepath}")
+        print(f"文件确实存在: {filepath.exists()}")
+
         return jsonify({"code":200,"msg": "File uploaded successfully", "data": f"{uuid_v1}_{file.filename}"}), 200
     except Exception as e:
+        import traceback
+        print(f"上传文件时发生错误: {str(e)}")
+        print(f"错误类型: {type(e).__name__}")
+        print("完整的错误堆栈:")
+        traceback.print_exc()
         return jsonify({"code":500,"msg": str(e),"data":None}), 500
 
 @app.route('/getFile', methods=['GET'])
@@ -377,7 +405,7 @@ def delete_account():
 # SSE 登录接口
 @app.route('/login')
 def login():
-    # 1 小红书 2 视频号 3 抖音 4 快手
+    # 1 小红书 2 视频号 3 抖音 4 快手 5 Bilibili
     type = request.args.get('type')
     # 账号名
     id = request.args.get('id')
@@ -412,6 +440,7 @@ def postVideo():
     account_list = data.get('accountList', [])
     type = data.get('type')
     title = data.get('title')
+    description = data.get('description', '')  # 新增参数：作品简介
     tags = data.get('tags')
     category = data.get('category')
     enableTimer = data.get('enableTimer')
@@ -444,20 +473,36 @@ def postVideo():
         match type:
             case 1:
                 post_video_xhs(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                   start_days)
+                                   start_days, description, thumbnail_path)
             case 2:
                 post_video_tencent(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                   start_days, is_draft)
+                                   start_days, is_draft, description, thumbnail_path)
             case 3:
                 post_video_DouYin(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                          start_days, thumbnail_path, productLink, productTitle)
+                          start_days, thumbnail_path, productLink, productTitle, description)
             case 4:
                 post_video_ks(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                          start_days)
+                          start_days, description, thumbnail_path)
+            case 5:
+                result = post_video_bilibili(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
+                          start_days, description, thumbnail_path)
+                # Bilibili返回详细结果
+                if result["success"]:
+                    return jsonify({
+                        "code": 200,
+                        "msg": f"发布成功，共{result['success_count']}个视频",
+                        "data": result
+                    }), 200
+                else:
+                    return jsonify({
+                        "code": 500,
+                        "msg": f"发布失败，成功{result['success_count']}个，失败{result['failed_count']}个",
+                        "data": result
+                    }), 500
             case _:
                 return jsonify({"code": 400, "msg": f"不支持的平台类型: {type}", "data": None}), 400
 
-        # 返回响应给客户端
+        # 返回响应给客户端(其他平台)
         return jsonify(
             {
                 "code": 200,
@@ -529,7 +574,9 @@ def postVideoBatch():
             category = None
         productLink = data.get('productLink', '')
         productTitle = data.get('productTitle', '')
+        thumbnail_path = data.get('thumbnail', '')
         is_draft = data.get('isDraft', False)
+        description = data.get('description', '')
 
         videos_per_day = data.get('videosPerDay')
         daily_times = data.get('dailyTimes')
@@ -540,16 +587,19 @@ def postVideoBatch():
         match type:
             case 1:
                 post_video_xhs(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                               start_days)
+                               start_days, description, thumbnail_path)
             case 2:
                 post_video_tencent(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                                   start_days, is_draft)
+                                   start_days, is_draft, description, thumbnail_path)
             case 3:
                 post_video_DouYin(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                          start_days, productLink, productTitle)
+                          start_days, thumbnail_path, productLink, productTitle, description)
             case 4:
                 post_video_ks(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
-                          start_days)
+                          start_days, description, thumbnail_path)
+            case 5:
+                post_video_bilibili(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
+                          start_days, description, thumbnail_path)
     # 返回响应给客户端
     return jsonify(
         {
@@ -701,6 +751,11 @@ def run_async_function(type,id,status_queue):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(get_ks_cookie(id,status_queue))
+            loop.close()
+        case '5':
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(bilibili_cookie_gen(id,status_queue))
             loop.close()
 
 # SSE 流生成器函数

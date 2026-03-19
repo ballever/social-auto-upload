@@ -82,7 +82,7 @@ async def weixin_setup(account_file, handle=False):
 
 
 class TencentVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, category=None, is_draft=False):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, category=None, is_draft=False, description=None, thumbnail_path=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -92,6 +92,8 @@ class TencentVideo(object):
         self.headless = LOCAL_CHROME_HEADLESS
         self.is_draft = is_draft  # 是否保存为草稿
         self.local_executable_path = LOCAL_CHROME_PATH or None
+        self.description = description  # 作品简介（可选）
+        self.thumbnail_path = thumbnail_path  # 封面图片路径（可选）
 
     async def set_schedule_time_tencent(self, page, publish_date):
         label_element = page.locator("label").filter(has_text="定时").nth(1)
@@ -160,6 +162,9 @@ class TencentVideo(object):
         await self.add_collection(page)
         # 原创选择
         await self.add_original(page)
+        # 上传封面图片（如果提供了）
+        if self.thumbnail_path:
+            await self.set_thumbnail(page, self.thumbnail_path)
         # 检测上传状态
         await self.detect_upload_status(page)
         if self.publish_date != 0:
@@ -219,6 +224,77 @@ class TencentVideo(object):
                 tencent_logger.info("  [-] 视频正在发布中...")
                 await asyncio.sleep(0.5)
 
+    async def set_thumbnail(self, page, thumbnail_path: str):
+        """设置视频封面图片"""
+        if not thumbnail_path:
+            return
+            
+        try:
+            tencent_logger.info('  [-] 正在设置视频封面...')
+            
+            # 尝试多种选择器来定位封面上传区域
+            cover_selectors = [
+                'div.cover-uploader',
+                'div[class*="cover-upload"]',
+                'div[class*="thumbnail-upload"]',
+                'div[class*="cover"] input[type="file"]',
+                'input[type="file"][accept*="image"]',
+                'div.upload-cover',
+                'div.cover-upload-area',
+                'div.upload-area',
+                'div[role="button"][aria-label*="封面"]',
+                'button:has-text("上传封面")',
+                'button:has-text("选择封面")',
+                'div:has-text("封面") input[type="file"]'
+            ]
+            
+            cover_found = False
+            for selector in cover_selectors:
+                try:
+                    # 等待页面稳定
+                    await page.wait_for_timeout(1000)
+                    
+                    # 检查元素是否存在
+                    locator = page.locator(selector)
+                    element_count = await locator.count()
+                    if element_count > 0:
+                        tencent_logger.info(f'  [-] 找到封面选择器: {selector}')
+                        
+                        if 'input[type="file"]' in selector:
+                            # 直接是文件输入框
+                            await locator.set_input_files(thumbnail_path)
+                        else:
+                            # 先点击元素，然后上传文件
+                            await locator.click()
+                            await page.wait_for_timeout(500)
+                            
+                            # 尝试找到文件输入框
+                            file_inputs = await page.locator('input[type="file"]').all()
+                            if file_inputs:
+                                # 使用第一个文件输入框
+                                await file_inputs[0].set_input_files(thumbnail_path)
+                            else:
+                                # 如果没有找到文件输入框，尝试通过文件选择器
+                                async with page.expect_file_chooser() as fc_info:
+                                    await locator.click()
+                                file_chooser = await fc_info.value
+                                await file_chooser.set_files(thumbnail_path)
+                        
+                        tencent_logger.info('  [+] 视频封面设置完成！')
+                        await page.wait_for_timeout(2000)  # 等待封面处理完成
+                        cover_found = True
+                        break
+                        
+                except Exception as e:
+                    tencent_logger.debug(f'  [-] 选择器 {selector} 失败: {e}')
+                    continue
+            
+            if not cover_found:
+                tencent_logger.warning('  [-] 未找到封面上传区域，跳过封面设置')
+                
+        except Exception as e:
+            tencent_logger.warning(f'  [-] 设置封面失败: {e}，继续发布流程')
+
     async def detect_upload_status(self, page):
         while True:
             # 匹配删除按钮，代表视频上传完毕，如果不存在，代表视频正在上传，则等待
@@ -241,9 +317,13 @@ class TencentVideo(object):
                 await asyncio.sleep(2)
 
     async def add_title_tags(self, page):
-        await page.locator("div.input-editor").click()
-        await page.keyboard.type(self.title)
-        await page.keyboard.press("Enter")
+        # 先输入简介（如果有），然后输入话题到视频描述中
+        if self.description:
+            await page.locator("div.input-editor").click()
+            await page.keyboard.type(self.description)
+            await page.keyboard.press("Enter")
+        
+        # 输入话题标签
         for index, tag in enumerate(self.tags, start=1):
             await page.keyboard.type("#" + tag)
             await page.keyboard.press("Space")

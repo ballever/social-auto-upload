@@ -85,6 +85,40 @@
             </div>
           </div>
 
+          <!-- 封面图片上传区域 -->
+          <div class="cover-section">
+            <h3>封面图片 <span style="font-size: 12px; color: #909399; font-weight: normal;">(可选)</span></h3>
+            <div class="cover-upload">
+              <el-upload
+                class="cover-uploader"
+                :action="`${apiBaseUrl}/upload`"
+                :show-file-list="false"
+                :on-success="(response, file) => handleCoverUploadSuccess(response, file, tab)"
+                :on-error="handleCoverUploadError"
+                :before-upload="beforeCoverUpload"
+                accept="image/*"
+                :headers="authHeaders"
+              >
+                <div v-if="tab.coverImage" class="cover-preview">
+                  <img :src="tab.coverImage.url" class="cover-image" />
+                  <div class="cover-actions">
+                    <el-button type="primary" size="small" @click.stop="changeCoverImage(tab)">更换</el-button>
+                    <el-button type="danger" size="small" @click.stop="removeCoverImage(tab)">删除</el-button>
+                  </div>
+                </div>
+                <el-button v-else type="primary" plain>
+                  <el-icon><Picture /></el-icon>
+                  上传封面图片
+                </el-button>
+                <template #tip>
+                  <div class="el-upload__tip">
+                    支持JPG、PNG格式，建议尺寸1080x1920（竖版）或1920x1080（横版）
+                  </div>
+                </template>
+              </el-upload>
+            </div>
+          </div>
+
           <!-- 上传选项弹窗 -->
           <el-dialog
             v-model="uploadOptionsVisible"
@@ -349,6 +383,20 @@
             />
           </div>
 
+          <!-- 作品简介输入（可选） -->
+          <div class="description-section">
+            <h3>简介 <span style="font-size: 12px; color: #909399; font-weight: normal;">(可选)</span></h3>
+            <el-input
+              v-model="tab.description"
+              type="textarea"
+              :rows="4"
+              placeholder="请输入作品简介（可选）"
+              maxlength="500"
+              show-word-limit
+              class="description-input"
+            />
+          </div>
+
           <!-- 话题输入 -->
           <div class="topic-section">
             <h3>话题</h3>
@@ -492,7 +540,7 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { Upload, Plus, Close, Folder } from '@element-plus/icons-vue'
+import { Upload, Plus, Close, Folder, Picture } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAccountStore } from '@/stores/account'
 import { useAppStore } from '@/stores/app'
@@ -534,7 +582,8 @@ const platforms = [
   { key: 3, name: '抖音' },
   { key: 4, name: '快手' },
   { key: 2, name: '视频号' },
-  { key: 1, name: '小红书' }
+  { key: 1, name: '小红书' },
+  { key: 5, name: 'Bilibili' }
 ]
 
 const defaultTabInit = {
@@ -545,6 +594,7 @@ const defaultTabInit = {
   selectedAccounts: [], // 选中的账号ID列表
   selectedPlatform: 1, // 选中的平台（单选）
   title: '',
+  description: '', // 作品简介（可选）
   productLink: '', // 商品链接
   productTitle: '', // 商品名称
   selectedTopics: [], // 话题列表（不带#号）
@@ -555,7 +605,8 @@ const defaultTabInit = {
   publishStatus: null, // 发布状态，包含message和type
   publishing: false, // 发布状态，用于控制按钮loading效果
   isDraft: false, // 是否保存为草稿，仅视频号平台可见
-  isOriginal: false // 是否标记为原创
+  isOriginal: false, // 是否标记为原创
+  coverImage: null // 封面图片信息
 }
 
 // helper to create a fresh deep-copied tab from defaultTabInit
@@ -587,7 +638,8 @@ const availableAccounts = computed(() => {
     3: '抖音',
     2: '视频号',
     1: '小红书',
-    4: '快手'
+    4: '快手',
+    5: 'Bilibili'
   }
   const currentPlatform = currentTab.value ? platformMap[currentTab.value.selectedPlatform] : null
   return currentPlatform ? accountStore.accounts.filter(acc => acc.platform === currentPlatform) : []
@@ -661,6 +713,67 @@ const handleUploadSuccess = (response, file, tab) => {
 // 处理文件上传失败
 const handleUploadError = (error) => {
   ElMessage.error('文件上传失败')
+}
+
+// 封面图片上传前的验证
+const beforeCoverUpload = (file) => {
+  const isImage = file.type.startsWith('image/')
+  const isLt5M = file.size / 1024 / 1024 < 5
+  
+  if (!isImage) {
+    ElMessage.error('只能上传图片文件！')
+    return false
+  }
+  
+  if (!isLt5M) {
+    ElMessage.error('图片大小不能超过5MB！')
+    return false
+  }
+  
+  return true
+}
+
+// 处理封面图片上传成功
+const handleCoverUploadSuccess = (response, file, tab) => {
+  if (response.code === 200) {
+    // 获取文件路径
+    const filePath = response.data.path || response.data
+    // 从路径中提取文件名
+    const filename = filePath.split('/').pop()
+    
+    // 保存封面图片信息
+    tab.coverImage = {
+      name: file.name,
+      url: materialApi.getMaterialPreviewUrl(filename),
+      path: filePath,
+      size: file.size,
+      type: file.type
+    }
+    
+    ElMessage.success('封面图片上传成功')
+  } else {
+    ElMessage.error(response.msg || '封面图片上传失败')
+  }
+}
+
+// 处理封面图片上传失败
+const handleCoverUploadError = (error) => {
+  ElMessage.error('封面图片上传失败')
+}
+
+// 更换封面图片
+const changeCoverImage = (tab) => {
+  // 触发上传组件的点击事件
+  const uploadElement = document.querySelector(`.cover-uploader input[type="file"]`)
+  if (uploadElement) {
+    uploadElement.click()
+  }
+}
+
+// 删除封面图片
+const removeCoverImage = (tab) => {
+  tab.coverImage = null
+  ElMessage.success('封面图片已删除')
 }
 
 // 删除已上传文件
@@ -793,7 +906,8 @@ const confirmPublish = async (tab) => {
   const publishData = {
     type: tab.selectedPlatform,
     title: tab.title,
-    tags: tab.selectedTopics, // 不带#号的话题列表
+    description: tab.description || '', // 作品简介（可选），单独发送
+    tags: tab.selectedTopics, // 话题列表，单独发送
     fileList: tab.fileList.map(file => file.path), // 只发送文件路径
     accountList: tab.selectedAccounts.map(accountId => {
       const account = accountStore.accounts.find(acc => acc.id === accountId)
@@ -806,7 +920,8 @@ const confirmPublish = async (tab) => {
     category: tab.isOriginal ? 1 : 0, // 1表示原创，0表示非原创
     productLink: tab.productLink.trim() || '',
     productTitle: tab.productTitle.trim() || '',
-    isDraft: tab.isDraft
+    isDraft: tab.isDraft,
+    thumbnail: tab.coverImage ? tab.coverImage.path : '' // 封面图片路径
   }
 
   // 调用后端发布API（使用统一的http封装）
@@ -820,9 +935,11 @@ const confirmPublish = async (tab) => {
     tab.fileList = []
     tab.displayFileList = []
     tab.title = ''
+    tab.description = ''
     tab.selectedTopics = []
     tab.selectedAccounts = []
     tab.scheduleEnabled = false
+    tab.coverImage = null
   } catch (error) {
     console.error('发布错误:', error)
     tab.publishStatus = {
@@ -1170,9 +1287,11 @@ const batchPublish = async () => {
         }
         
         .upload-section,
+        .cover-section,
         .account-section,
         .platform-section,
         .title-section,
+        .description-section,
         .product-section,
         .topic-section,
         .schedule-section {
@@ -1210,6 +1329,10 @@ const batchPublish = async () => {
         }
         
         .title-input {
+          max-width: 600px;
+        }
+
+        .description-input {
           max-width: 600px;
         }
         
@@ -1336,6 +1459,73 @@ const batchPublish = async () => {
           font-size: 13px;
           margin-right: auto;
         }
+      }
+    }
+  }
+
+  // 封面图片上传样式
+  .cover-section {
+    .cover-upload {
+      .cover-uploader {
+        .cover-preview {
+          position: relative;
+          width: 200px;
+          height: 200px;
+          border: 1px dashed #dcdfe6;
+          border-radius: 6px;
+          overflow: hidden;
+          cursor: pointer;
+          
+          .cover-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+          }
+          
+          .cover-actions {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            
+            &:hover {
+              opacity: 1;
+            }
+          }
+          
+          &:hover .cover-actions {
+            opacity: 1;
+          }
+        }
+        
+        .el-button {
+          width: 200px;
+          height: 200px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          border: 1px dashed #dcdfe6;
+          border-radius: 6px;
+          
+          .el-icon {
+            font-size: 24px;
+          }
+        }
+      }
+      
+      .el-upload__tip {
+        margin-top: 8px;
+        font-size: 12px;
+        color: #909399;
       }
     }
   }

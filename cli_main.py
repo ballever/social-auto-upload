@@ -79,17 +79,17 @@ async def main():
 
         if args.platform == SOCIAL_MEDIA_DOUYIN:
             await douyin_setup(account_file, handle=False)
-            app = DouYinVideo(title, video_file, tags, publish_date, account_file)
+            app = DouYinVideo(title, video_file, tags, publish_date, account_file, description=None)
         elif args.platform == SOCIAL_MEDIA_TIKTOK:
             await tiktok_setup(account_file, handle=True)
-            app = TiktokVideo(title, video_file, tags, publish_date, account_file)
+            app = TiktokVideo(title, video_file, tags, publish_date, account_file, description=None)
         elif args.platform == SOCIAL_MEDIA_TENCENT:
             await weixin_setup(account_file, handle=True)
             category = TencentZoneTypes.LIFESTYLE.value  # 标记原创需要否则不需要传
-            app = TencentVideo(title, video_file, tags, publish_date, account_file, category)
+            app = TencentVideo(title, video_file, tags, publish_date, account_file, category, description=None)
         elif args.platform == SOCIAL_MEDIA_KUAISHOU:
             await ks_setup(account_file, handle=True)
-            app = KSVideo(title, video_file, tags, publish_date, account_file)
+            app = KSVideo(title, video_file, tags, publish_date, account_file, description=None)
         else:
             print("Wrong platform, please check your input")
             exit()

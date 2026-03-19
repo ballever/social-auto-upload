@@ -7,7 +7,7 @@ from xhs import XhsClient
 
 from conf import BASE_DIR, LOCAL_CHROME_HEADLESS
 from utils.base_social_media import set_init_script
-from utils.log import tencent_logger, kuaishou_logger, douyin_logger
+from utils.log import tencent_logger, kuaishou_logger, douyin_logger, bilibili_logger
 from pathlib import Path
 from uploader.xhs_uploader.main import sign_local
 
@@ -102,6 +102,32 @@ async def cookie_auth_xhs(account_file):
             return True
 
 
+async def cookie_auth_bilibili(account_file):
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        context = await browser.new_context(storage_state=account_file)
+        context = await set_init_script(context)
+        # 创建一个新的页面
+        page = await context.new_page()
+        # 访问指定的 URL
+        await page.goto("https://member.bilibili.com/platform/home")
+        try:
+            await page.wait_for_load_state('networkidle', timeout=5000)
+            # 检查是否跳转到登录页面
+            current_url = page.url
+            if 'passport.bilibili.com' in current_url:
+                bilibili_logger.error("[+] cookie 失效，需要扫码登录")
+                return False
+            else:
+                bilibili_logger.success("[+] cookie 有效")
+                return True
+        except:
+            bilibili_logger.error("[+] 等待5秒 cookie 失效")
+            await context.close()
+            await browser.close()
+            return False
+
+
 async def check_cookie(type, file_path):
     match type:
         # 小红书
@@ -116,6 +142,9 @@ async def check_cookie(type, file_path):
         # 快手
         case 4:
             return await cookie_auth_ks(Path(BASE_DIR / "cookiesFile" / file_path))
+        # Bilibili
+        case 5:
+            return await cookie_auth_bilibili(Path(BASE_DIR / "cookiesFile" / file_path))
         case _:
             return False
 

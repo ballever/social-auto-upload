@@ -316,5 +316,133 @@ async def xiaohongshu_cookie_gen(id,status_queue):
             print("✅ 用户状态已记录")
         status_queue.put("200")
 
+# Bilibili登录
+async def bilibili_cookie_gen(id, status_queue):
+    url_changed_event = asyncio.Event()
+
+    async def on_url_change():
+        # 检查是否是主框架的变化
+        if page.url != original_url:
+            url_changed_event.set()
+
+    async with async_playwright() as playwright:
+        options = get_browser_options()
+        # Make sure to run headed.
+        browser = await playwright.chromium.launch(**options)
+        # Setup context however you like.
+        context = await browser.new_context()  # Pass any options
+        context = await set_init_script(context)
+        # Pause the page, and start recording manually.
+        page = await context.new_page()
+        await page.goto("https://member.bilibili.com/platform/home")
+        original_url = page.url
+
+        # 等待页面加载完成
+        await page.wait_for_load_state('networkidle')
+
+        # 检查是否已经登录
+        current_url = page.url
+        if 'passport.bilibili.com' not in current_url:
+            # 已经登录，直接保存cookie
+            uuid_v1 = uuid.uuid1()
+            print(f"UUID v1: {uuid_v1}")
+            cookies_dir = Path(BASE_DIR / "cookiesFile")
+            cookies_dir.mkdir(exist_ok=True)
+            await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
+            result = await check_cookie(5, f"{uuid_v1}.json")
+            if not result:
+                status_queue.put("500")
+                await page.close()
+                await context.close()
+                await browser.close()
+                return None
+            await page.close()
+            await context.close()
+            await browser.close()
+            with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+                cursor = conn.cursor()
+                cursor.execute('''
+                               INSERT INTO user_info (type, filePath, userName, status)
+                               VALUES (?, ?, ?, ?)
+                               ''', (5, f"{uuid_v1}.json", id, 1))
+                conn.commit()
+                print("✅ 用户状态已记录")
+            status_queue.put("200")
+            return
+
+        # 需要登录，获取二维码
+        try:
+            # 等待二维码出现
+            await page.wait_for_selector('.qrcode-img', timeout=10000)
+            img_locator = page.locator('.qrcode-img img')
+            src = await img_locator.get_attribute('src')
+            print("✅ 图片地址:", src)
+            status_queue.put(src)
+        except Exception as e:
+            print(f"获取二维码失败: {e}")
+            # 尝试其他选择器
+            try:
+                img_locator = page.get_by_role("img").first
+                src = await img_locator.get_attribute('src')
+                if src and 'qr' in src.lower():
+                    print("✅ 图片地址(备用):", src)
+                    status_queue.put(src)
+                else:
+                    status_queue.put("500")
+                    await page.close()
+                    await context.close()
+                    await browser.close()
+                    return None
+            except:
+                status_queue.put("500")
+                await page.close()
+                await context.close()
+                await browser.close()
+                return None
+
+        # 监听页面的 'framenavigated' 事件，只关注主框架的变化
+        page.on('framenavigated',
+                lambda frame: asyncio.create_task(on_url_change()) if frame == page.main_frame else None)
+
+        try:
+            # 等待 URL 变化或超时
+            await asyncio.wait_for(url_changed_event.wait(), timeout=200)  # 最多等待 200 秒
+            print("监听页面跳转成功")
+        except asyncio.TimeoutError:
+            print("监听页面跳转超时")
+            await page.close()
+            await context.close()
+            await browser.close()
+            status_queue.put("500")
+            return None
+
+        uuid_v1 = uuid.uuid1()
+        print(f"UUID v1: {uuid_v1}")
+        # 确保cookiesFile目录存在
+        cookies_dir = Path(BASE_DIR / "cookiesFile")
+        cookies_dir.mkdir(exist_ok=True)
+        await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
+        result = await check_cookie(5, f"{uuid_v1}.json")
+        if not result:
+            status_queue.put("500")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
+        await page.close()
+        await context.close()
+        await browser.close()
+
+        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                           INSERT INTO user_info (type, filePath, userName, status)
+                           VALUES (?, ?, ?, ?)
+                           ''', (5, f"{uuid_v1}.json", id, 1))
+            conn.commit()
+            print("✅ 用户状态已记录")
+        status_queue.put("200")
+
+
 # a = asyncio.run(xiaohongshu_cookie_gen(4,None))
 # print(a)

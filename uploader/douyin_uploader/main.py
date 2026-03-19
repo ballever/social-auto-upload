@@ -64,7 +64,7 @@ async def douyin_cookie_gen(account_file):
 
 
 class DouYinVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None, productLink='', productTitle=''):
+    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None, productLink='', productTitle='', description=None):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
@@ -76,6 +76,7 @@ class DouYinVideo(object):
         self.thumbnail_path = thumbnail_path
         self.productLink = productLink
         self.productTitle = productTitle
+        self.description = description  # 作品简介（可选）
 
     async def set_schedule_time_douyin(self, page, publish_date):
         # 选择包含特定文本内容的 label 元素
@@ -140,13 +141,19 @@ class DouYinVideo(object):
                     await asyncio.sleep(0.5)  # 等待 0.5 秒后重新尝试
         # 填充标题和话题
         # 检查是否存在包含输入框的元素
-        # 这里为了避免页面变化，故使用相对位置定位：作品标题父级右侧第一个元素的input子元素
         await asyncio.sleep(1)
         douyin_logger.info(f'  [-] 正在填充标题和话题...')
-        title_container = page.get_by_text('作品标题').locator("..").locator("xpath=following-sibling::div[1]").locator("input")
+
+        # 使用更简单准确的定位方式：找到包含"作品标题"的placeholder的input
+        title_container = page.locator('input[placeholder*="作品标题"]')
+        title_count = await title_container.count()
+        print(f"  [=] 找到 {title_count} 个标题输入框")
+
         if await title_container.count():
+            print(f"  [+] 使用placeholder定位填充标题: {self.title[:30]}")
             await title_container.fill(self.title[:30])
         else:
+            print(f"  [-] placeholder定位失败，尝试备用方案...")
             titlecontainer = page.locator(".notranslate")
             await titlecontainer.click()
             await page.keyboard.press("Backspace")
@@ -154,11 +161,37 @@ class DouYinVideo(object):
             await page.keyboard.press("Delete")
             await page.keyboard.type(self.title)
             await page.keyboard.press("Enter")
+
+        # 填充简介和话题（共用同一个输入框）
+        print(f"  [DEBUG] 开始执行简介和话题填充逻辑")
         css_selector = ".zone-container"
-        for index, tag in enumerate(self.tags, start=1):
-            await page.type(css_selector, "#" + tag)
-            await page.press(css_selector, "Space")
-        douyin_logger.info(f'总共添加{len(self.tags)}个话题')
+        print(f"  [=] 尝试定位简介和话题输入框: {css_selector}")
+        editor_count = await page.locator(css_selector).count()
+        print(f"  [=] 找到 {editor_count} 个输入框")
+
+        if editor_count > 0:
+            print(f"  [+] 开始填充简介和话题...")
+            # 先点击输入框确保激活
+            await page.locator(css_selector).first.click()
+            await asyncio.sleep(0.5)  # 等待输入框激活
+
+            # 先输入简介（如果有）
+            if self.description:
+                print(f"  [=] 输入简介: {self.description[:50]}...")
+                await page.type(css_selector, self.description)
+                print(f"  [+] 简介输入完成")
+
+            # 输入话题标签
+            for index, tag in enumerate(self.tags, start=1):
+                print(f"  [=] 添加话题 {index}/{len(self.tags)}: #{tag}")
+                # 如果有简介，先换行
+                if self.description or index > 1:
+                    await page.press(css_selector, "Enter")
+                await page.type(css_selector, "#" + tag)
+                await page.press(css_selector, "Space")
+            douyin_logger.info(f'总共添加{len(self.tags)}个话题')
+        else:
+            print(f"  [!] 未找到简介和话题输入框，跳过话题填充")
         while True:
             # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
             try:
