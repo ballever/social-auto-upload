@@ -70,6 +70,29 @@ def get_baijiahao_options():
     return get_browser_options()
 
 
+async def click_baijiahao_login_button(page):
+    """尝试多种方式点击百家号登录按钮"""
+    selectors = [
+        ("text", "登录/注册百家号"),
+        ("text", "登录", {"exact": True}),
+        ("role", "link", {"name": "登录"}),
+    ]
+
+    for selector_type, *args in selectors:
+        try:
+            if selector_type == "text":
+                await page.get_by_text(*args).click(timeout=5000)
+            elif selector_type == "role":
+                await page.get_by_role(*args).click(timeout=5000)
+            print(f"✅ 成功点击登录按钮 (选择器: {selector_type})")
+            return True
+        except Exception as e:
+            print(f"⚠️ 选择器 {selector_type} 失败: {e}")
+            continue
+
+    return False
+
+
 # 抖音登录
 async def douyin_cookie_gen(id, status_queue):
     url_changed_event = asyncio.Event()
