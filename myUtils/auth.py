@@ -7,14 +7,14 @@ from xhs import XhsClient
 
 from conf import BASE_DIR, LOCAL_CHROME_HEADLESS
 from utils.base_social_media import set_init_script
-from utils.log import tencent_logger, kuaishou_logger, douyin_logger, bilibili_logger
+from utils.log import tencent_logger, kuaishou_logger, douyin_logger, bilibili_logger, baijiahao_logger
 from pathlib import Path
 from uploader.xhs_uploader.main import sign_local
 
 
 async def cookie_auth_douyin(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -42,7 +42,7 @@ async def cookie_auth_douyin(account_file):
 
 async def cookie_auth_tencent(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -60,7 +60,7 @@ async def cookie_auth_tencent(account_file):
 
 async def cookie_auth_ks(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -79,7 +79,7 @@ async def cookie_auth_ks(account_file):
 
 async def cookie_auth_xhs(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -104,7 +104,7 @@ async def cookie_auth_xhs(account_file):
 
 async def cookie_auth_bilibili(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -128,6 +128,48 @@ async def cookie_auth_bilibili(account_file):
             return False
 
 
+async def cookie_auth_baijiahao(account_file):
+    """验证百家号cookie是否有效"""
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        context = await browser.new_context(storage_state=account_file)
+        context = await set_init_script(context)
+        page = await context.new_page()
+
+        await page.goto("https://baijiahao.baidu.com/builder/rc/home")
+        await page.wait_for_timeout(5000)
+
+        # 检查安全验证
+        if await page.locator('div.passMod_dialog-container:visible').count():
+            baijiahao_logger.error("Cookie失效: 出现安全验证")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return False
+
+        # 检查是否有登录按钮
+        if await page.get_by_text("登录/注册百家号").count() > 0:
+            baijiahao_logger.error("Cookie失效: 需要登录")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return False
+
+        # 检查URL是否在创作者中心
+        if "builder/rc" not in page.url:
+            baijiahao_logger.error(f"Cookie失效: 页面跳转到 {page.url}")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return False
+
+        baijiahao_logger.success("[+] cookie 有效")
+        await page.close()
+        await context.close()
+        await browser.close()
+        return True
+
+
 async def check_cookie(type, file_path):
     match type:
         # 小红书
@@ -145,6 +187,9 @@ async def check_cookie(type, file_path):
         # Bilibili
         case 5:
             return await cookie_auth_bilibili(Path(BASE_DIR / "cookiesFile" / file_path))
+        # 百家号
+        case 6:
+            return await cookie_auth_baijiahao(Path(BASE_DIR / "cookiesFile" / file_path))
         case _:
             return False
 
