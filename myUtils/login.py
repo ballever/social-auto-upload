@@ -93,6 +93,30 @@ async def click_baijiahao_login_button(page):
     return False
 
 
+async def get_baijiahao_qrcode_src(page):
+    """获取百家号二维码图片地址"""
+    selectors = [
+        ".tang-pass-qrcode-img",
+        ".qrcode-img img",
+        "img[src*='qr']",
+        "img[src*='qrcode']",
+    ]
+
+    for selector in selectors:
+        try:
+            img = page.locator(selector)
+            if await img.count() > 0:
+                src = await img.get_attribute("src", timeout=5000)
+                if src:
+                    print(f"✅ 获取二维码成功 (选择器: {selector})")
+                    return src
+        except Exception as e:
+            print(f"⚠️ 选择器 {selector} 失败: {e}")
+            continue
+
+    return None
+
+
 # 抖音登录
 async def douyin_cookie_gen(id, status_queue):
     url_changed_event = asyncio.Event()
