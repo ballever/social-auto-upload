@@ -117,6 +117,32 @@ async def get_baijiahao_qrcode_src(page):
     return None
 
 
+async def wait_baijiahao_login_success(page, timeout=200):
+    """等待百家号登录成功，同时检测安全验证"""
+    import time
+
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        # 检查安全验证弹窗
+        if await page.locator("div.passMod_dialog-container:visible").count():
+            raise Exception("出现百度安全验证，请手动处理后重新运行")
+
+        # 检查是否跳转到创作者中心
+        if "builder/rc" in page.url:
+            print("✅ 检测到跳转到创作者中心")
+            return True
+
+        # 检查登录按钮是否消失
+        if await page.get_by_text("登录/注册百家号").count() == 0:
+            print("✅ 登录按钮已消失，登录成功")
+            return True
+
+        await asyncio.sleep(1)
+
+    return False
+
+
 # 抖音登录
 async def douyin_cookie_gen(id, status_queue):
     url_changed_event = asyncio.Event()
