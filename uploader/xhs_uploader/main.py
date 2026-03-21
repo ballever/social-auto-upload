@@ -20,7 +20,7 @@ def sign_local(uri, data=None, a1="", web_session=""):
                 chromium = playwright.chromium
 
                 # 如果一直失败可尝试设置成 False 让其打开浏览器，适当添加 sleep 可查看浏览器状态
-                browser = chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+                browser = chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
 
                 browser_context = browser.new_context()
                 browser_context.add_init_script(path=stealth_js_path)

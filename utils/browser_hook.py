@@ -13,5 +13,8 @@ def get_browser_options():
         ]
     }
     if LOCAL_CHROME_PATH:
+        # 使用系统 Chrome 而不是 Playwright 自带的 Chromium
         options['executable_path'] = LOCAL_CHROME_PATH
+        # 添加 channel 参数以确保使用 Chrome 而不是 Chromium
+        options['channel'] = 'chrome'
     return options

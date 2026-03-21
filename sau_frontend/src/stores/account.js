@@ -11,7 +11,8 @@ export const useAccountStore = defineStore('account', () => {
     2: '视频号',
     3: '抖音',
     4: '快手',
-    5: 'Bilibili'
+    5: 'Bilibili',
+    6: '百家号'
   }
   
   // 设置账号列表

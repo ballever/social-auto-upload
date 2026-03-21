@@ -33,7 +33,7 @@ def format_str_for_short_title(origin_title: str) -> str:
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS)
+        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -56,6 +56,7 @@ async def get_tencent_cookie(account_file):
                 '--lang en-GB'
             ],
             'headless': LOCAL_CHROME_HEADLESS,  # Set headless option here
+            'channel': 'chrome',
         }
         # Make sure to run headed.
         browser = await playwright.chromium.launch(**options)
@@ -139,7 +140,7 @@ class TencentVideo(object):
 
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium (这里使用系统内浏览器，用chromium 会造成h264错误
-        browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path)
+        browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path, channel="chrome")
         # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(storage_state=f"{self.account_file}")
         context = await set_init_script(context)

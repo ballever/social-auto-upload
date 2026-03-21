@@ -84,9 +84,10 @@ class BilibiliUploader(object):
             self.browser = await playwright.chromium.launch(
                 headless=self.headless,
                 executable_path=self.local_executable_path,
+                channel="chrome"  # 使用系统 Chrome 而不是 Chromium
             )
         else:
-            self.browser = await playwright.chromium.launch(headless=self.headless)
+            self.browser = await playwright.chromium.launch(headless=self.headless, channel="chrome")
         
         # 创建浏览器上下文
         self.context = await self.browser.new_context(storage_state=f"{self.account_file}")
@@ -406,170 +407,8 @@ class BilibiliUploader(object):
                 bilibili_logger.warning(f'[-] ✗ 方案1失败: {e}')
             
             await asyncio.sleep(2)
-            
-            # 方案2: 检查页面状态并尝试提交表单
-            # bilibili_logger.info(f'[-] 方案2: 检查页面状态...')
-            # try:
-            #     # 检查页面是否有错误提示
-            #     error_elements = self.page.locator('.error-message, .error-text, .ant-message-error, .ant-alert-error')
-            #     error_count = await error_elements.count()
-            #     if error_count > 0:
-            #         for i in range(error_count):
-            #             error_text = await error_elements.nth(i).text_content()
-            #             bilibili_logger.warning(f'[-] 页面错误提示[{i}]: {error_text}')
-                
-            #     # 检查是否有必填项未填
-            #     required_fields = self.page.locator('[required], .required, .is-required')
-            #     required_count = await required_fields.count()
-            #     bilibili_logger.info(f'[-] 必填字段数量: {required_count}')
-                
-            #     # 检查上传是否完成
-            #     upload_status = self.page.locator('.upload-status, .upload-progress, .upload-success')
-            #     upload_count = await upload_status.count()
-            #     bilibili_logger.info(f'[-] 上传状态元素数量: {upload_count}')
-                
-            #     # 尝试直接提交表单
-            #     bilibili_logger.info(f'[-] 尝试提交表单...')
-            #     try:
-            #         # 查找表单
-            #         forms = self.page.locator('form')
-            #         form_count = await forms.count()
-            #         bilibili_logger.info(f'[-] 找到 {form_count} 个表单')
-                    
-            #         for i in range(form_count):
-            #             form = forms.nth(i)
-            #             # 尝试提交表单
-            #             await form.evaluate('form => form.submit()')
-            #             bilibili_logger.info(f'[-] ✓ 提交表单 {i+1} 完成')
-            #             await asyncio.sleep(1)
-            #     except Exception as e:
-            #         bilibili_logger.warning(f'[-] 提交表单失败: {e}')
-                
-            #     # 尝试触发提交事件
-            #     bilibili_logger.info(f'[-] 尝试触发提交事件...')
-            #     try:
-            #         await self.page.evaluate('''
-            #             () => {
-            #                 // 查找所有表单并触发submit事件
-            #                 const forms = document.querySelectorAll('form');
-            #                 forms.forEach(form => {
-            #                     const event = new Event('submit', { bubbles: true, cancelable: true });
-            #                     form.dispatchEvent(event);
-            #                 });
-                            
-            #                 // 查找所有按钮并触发click事件
-            #                 const buttons = document.querySelectorAll('button[type="submit"], input[type="submit"], .submit-add, [class*="submit"]');
-            #                 buttons.forEach(btn => {
-            #                     const event = new MouseEvent('click', { bubbles: true, cancelable: true });
-            #                     btn.dispatchEvent(event);
-            #                 });
-            #             }
-            #         ''')
-            #         bilibili_logger.info(f'[-] ✓ 触发提交事件完成')
-            #     except Exception as e:
-            #         bilibili_logger.warning(f'[-] 触发提交事件失败: {e}')
-                
-            # except Exception as e:
-            #     bilibili_logger.warning(f'[-] ✗ 方案2失败: {e}')
-            
-            # await asyncio.sleep(2)
-            
-            # # 方案3: 最终尝试 - 检查是否所有信息已填写
-            # bilibili_logger.info(f'[-] 方案3: 检查信息完整性...')
-            # try:
-            #     # 检查标题是否已填写
-            #     title_input = self.page.locator('input[placeholder*="标题"], input[name*="title"]')
-            #     title_count = await title_input.count()
-            #     if title_count > 0:
-            #         title_value = await title_input.first.input_value()
-            #         bilibili_logger.info(f'[-] 标题输入框值: {title_value}')
-                
-            #     # 检查分区是否已选择
-            #     partition_select = self.page.locator('.selector-container, .ant-select-selection-item')
-            #     partition_count = await partition_select.count()
-            #     bilibili_logger.info(f'[-] 分区选择器数量: {partition_count}')
-                
-            #     # 检查标签是否已填写
-            #     tag_input = self.page.locator('.tag-container input, [class*="tag"] input')
-            #     tag_count = await tag_input.count()
-            #     bilibili_logger.info(f'[-] 标签输入框数量: {tag_count}')
-                
-            #     # 检查上传进度
-            #     upload_progress = self.page.locator('.progress-bar, .progress-text, [class*="progress"]')
-            #     progress_count = await upload_progress.count()
-            #     bilibili_logger.info(f'[-] 上传进度元素数量: {progress_count}')
-                
-            #     # 如果上传未完成,等待一下
-            #     if progress_count > 0:
-            #         bilibili_logger.info(f'[-] 检测到上传进度,等待5秒...')
-            #         await asyncio.sleep(5)
-                
-            #     # 最终尝试: 精确查找"立即投稿"按钮
-            #     bilibili_logger.info(f'[-] 最终尝试: 精确查找"立即投稿"按钮...')
-                
-            #     # 查找"立即投稿"按钮
-            #     submit_buttons = [
-            #         'span.submit-add:has-text("立即投稿")',
-            #         'button:has-text("立即投稿")',
-            #         'text="立即投稿"',
-            #     ]
-                
-            #     final_submit_btn = None
-            #     for selector in submit_buttons:
-            #         btn = self.page.locator(selector).first
-            #         count = await btn.count()
-            #         if count > 0:
-            #             final_submit_btn = btn
-            #             bilibili_logger.info(f'[-] 使用选择器找到按钮: {selector}')
-            #             break
-                
-            #     if not final_submit_btn:
-            #         # 查找"保存草稿"按钮,确保不点到它
-            #         draft_btn = self.page.locator('text="保存草稿"').first
-            #         draft_count = await draft_btn.count()
-            #         bilibili_logger.info(f'[-] 找到"保存草稿"按钮数量: {draft_count}')
-                    
-            #         # 查找所有按钮,排除"保存草稿"
-            #         all_btns = self.page.locator('button, span, div, a')
-            #         btn_count = await all_btns.count()
-            #         bilibili_logger.info(f'[-] 总按钮数量: {btn_count}')
-                    
-            #         for i in range(min(btn_count, 30)):  # 只检查前30个
-            #             try:
-            #                 btn = all_btns.nth(i)
-            #                 text = await btn.text_content()
-            #                 if text and '投稿' in text and '保存草稿' not in text:
-            #                     bilibili_logger.info(f'[-] 找到投稿相关按钮[{i}]: {text}')
-            #                     if '立即投稿' in text:
-            #                         final_submit_btn = btn
-            #                         bilibili_logger.info(f'[-] 找到"立即投稿"按钮: {text}')
-            #                         break
-            #             except:
-            #                 continue
-                
-            #     if final_submit_btn:
-            #         # 确认按钮文本
-            #         try:
-            #             btn_text = await final_submit_btn.text_content()
-            #             bilibili_logger.info(f'[-] 确认按钮文本: {btn_text}')
-            #             if '立即投稿' not in btn_text:
-            #                 bilibili_logger.warning(f'[-] 警告: 按钮文本不是"立即投稿": {btn_text}')
-            #         except Exception as e:
-            #             bilibili_logger.warning(f'[-] 无法获取按钮文本: {e}')
-                    
-            #         bilibili_logger.info(f'[-] 尝试点击"立即投稿"按钮...')
-            #         try:
-            #             await final_submit_btn.click(force=True, timeout=5000)
-            #             bilibili_logger.info(f'[-] ✓ 最终点击完成')
-            #         except Exception as e:
-            #             bilibili_logger.warning(f'[-] 最终点击失败: {e}')
-            #     else:
-            #         bilibili_logger.warning(f'[-] 未找到"立即投稿"按钮,可能信息未填写完整或按钮被禁用')
-                    
-            # except Exception as e:
-            #     bilibili_logger.warning(f'[-] ✗ 方案3失败: {e}')
-                
-                # 确认发布(如果有确认弹窗)
+                      
+            # 确认发布(如果有确认弹窗)
             confirm_btn = self.page.locator('button:has-text("确定"), button:has-text("确认")').first
             if await confirm_btn.count():
                 await confirm_btn.click()

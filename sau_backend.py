@@ -10,8 +10,8 @@ from flask_cors import CORS
 from myUtils.auth import check_cookie
 from flask import Flask, request, jsonify, Response, render_template, send_from_directory
 from conf import BASE_DIR
-from myUtils.login import get_tencent_cookie, douyin_cookie_gen, get_ks_cookie, xiaohongshu_cookie_gen, bilibili_cookie_gen
-from myUtils.postVideo import post_video_tencent, post_video_DouYin, post_video_ks, post_video_xhs, post_video_bilibili
+from myUtils.login import get_tencent_cookie, douyin_cookie_gen, get_ks_cookie, xiaohongshu_cookie_gen, bilibili_cookie_gen, baijiahao_cookie_gen
+from myUtils.postVideo import post_video_tencent, post_video_DouYin, post_video_ks, post_video_xhs, post_video_bilibili, post_video_baijiahao
 
 active_queues = {}
 app = Flask(__name__)
@@ -262,7 +262,18 @@ async def getValidAccounts():
             print(row)
         for row in rows_list:
             flag = await check_cookie(row[1],row[2])
-            if not flag:
+            if flag:
+                # Cookie有效，更新状态为1
+                row[4] = 1
+                cursor.execute('''
+                UPDATE user_info 
+                SET status = ? 
+                WHERE id = ?
+                ''', (1,row[0]))
+                conn.commit()
+                print(f"✅ 用户 {row[3]} 状态已更新为正常")
+            else:
+                # Cookie无效，更新状态为0
                 row[4] = 0
                 cursor.execute('''
                 UPDATE user_info 
@@ -270,7 +281,7 @@ async def getValidAccounts():
                 WHERE id = ?
                 ''', (0,row[0]))
                 conn.commit()
-                print("✅ 用户状态已更新")
+                print(f"✅ 用户 {row[3]} 状态已更新为异常")
         for row in rows:
             print(row)
         return jsonify(
@@ -279,6 +290,64 @@ async def getValidAccounts():
                             "msg": None,
                             "data": rows_list
                         }),200
+
+@app.route('/validateAccount', methods=['GET'])
+async def validateAccount():
+    """验证单个账号的cookie有效性"""
+    account_id = request.args.get('id')
+    
+    if not account_id or not account_id.isdigit():
+        return jsonify({
+            "code": 400,
+            "msg": "Invalid or missing account ID",
+            "data": None
+        }), 400
+    
+    account_id = int(account_id)
+    
+    try:
+        with sqlite3.connect(Path(BASE_DIR / "db" / "database.db")) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute('''
+            SELECT * FROM user_info WHERE id = ?''', (account_id,))
+            row = cursor.fetchone()
+            
+            if not row:
+                return jsonify({
+                    "code": 404,
+                    "msg": "Account not found",
+                    "data": None
+                }), 404
+            
+            row_dict = dict(row)
+            # 验证cookie
+            flag = await check_cookie(row_dict['type'], row_dict['filePath'])
+            
+            # 更新状态
+            new_status = 1 if flag else 0
+            cursor.execute('''
+            UPDATE user_info 
+            SET status = ? 
+            WHERE id = ?''', (new_status, account_id))
+            conn.commit()
+            
+            # 返回更新后的账号信息
+            row_dict['status'] = new_status
+            
+            return jsonify({
+                "code": 200,
+                "msg": "Account validated successfully",
+                "data": row_dict
+            }), 200
+            
+    except Exception as e:
+        print(f"验证账号时出错: {str(e)}")
+        return jsonify({
+            "code": 500,
+            "msg": f"验证账号失败: {str(e)}",
+            "data": None
+        }), 500
 
 @app.route('/deleteFile', methods=['GET'])
 def delete_file():
@@ -409,6 +478,22 @@ def login():
     type = request.args.get('type')
     # 账号名
     id = request.args.get('id')
+    
+    # 检查是否已经有该用户的登录流程在进行中
+    if id in active_queues:
+        print(f"⚠️ 用户 {id} 的登录流程已在进行中，跳过重复请求")
+        # 返回一个特殊的消息，告诉前端登录流程已在进行中
+        def already_running_stream():
+            yield f"data: 登录流程已在进行中，请勿重复操作\n\n"
+            # 发送结束信号
+            yield f"data: 500\n\n"
+        
+        response = Response(already_running_stream(), mimetype='text/event-stream')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['X-Accel-Buffering'] = 'no'
+        response.headers['Content-Type'] = 'text/event-stream'
+        response.headers['Connection'] = 'keep-alive'
+        return response
 
     # 模拟一个用于异步通信的队列
     status_queue = Queue()
@@ -416,15 +501,44 @@ def login():
 
     def on_close():
         print(f"清理队列: {id}")
-        del active_queues[id]
+        if id in active_queues:
+            del active_queues[id]
+    
     # 启动异步任务线程
     thread = threading.Thread(target=run_async_function, args=(type,id,status_queue), daemon=True)
     thread.start()
-    response = Response(sse_stream(status_queue,), mimetype='text/event-stream')
+    
+    # 创建SSE流生成器，并在连接关闭时清理资源
+    def sse_stream_with_cleanup():
+        try:
+            while True:
+                if not status_queue.empty():
+                    msg = status_queue.get()
+                    yield f"data: {msg}\n\n"
+                    # 如果收到结束信号（200或500），退出循环
+                    if msg == '200' or msg == '500':
+                        break
+                else:
+                    # 避免 CPU 占满
+                    time.sleep(0.1)
+        except GeneratorExit:
+            # 当客户端断开连接时触发
+            print(f"客户端断开连接，清理资源: {id}")
+        finally:
+            # 确保清理资源
+            on_close()
+    
+    response = Response(sse_stream_with_cleanup(), mimetype='text/event-stream')
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['X-Accel-Buffering'] = 'no'  # 关键：禁用 Nginx 缓冲
     response.headers['Content-Type'] = 'text/event-stream'
     response.headers['Connection'] = 'keep-alive'
+    
+    # 设置回调，当响应结束时清理资源（注释掉，避免重复清理）
+    # @response.call_on_close
+    # def on_response_close():
+    #     on_close()
+    
     return response
 
 @app.route('/postVideo', methods=['POST'])
@@ -487,6 +601,22 @@ def postVideo():
                 result = post_video_bilibili(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
                           start_days, description, thumbnail_path)
                 # Bilibili返回详细结果
+                if result["success"]:
+                    return jsonify({
+                        "code": 200,
+                        "msg": f"发布成功，共{result['success_count']}个视频",
+                        "data": result
+                    }), 200
+                else:
+                    return jsonify({
+                        "code": 500,
+                        "msg": f"发布失败，成功{result['success_count']}个，失败{result['failed_count']}个",
+                        "data": result
+                    }), 500
+            case 6:
+                result = post_video_baijiahao(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
+                          start_days, description, thumbnail_path)
+                # 百家号返回详细结果
                 if result["success"]:
                     return jsonify({
                         "code": 200,
@@ -599,6 +729,9 @@ def postVideoBatch():
                           start_days, description, thumbnail_path)
             case 5:
                 post_video_bilibili(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
+                          start_days, description, thumbnail_path)
+            case 6:
+                post_video_baijiahao(title, file_list, tags, account_list, category, enableTimer, videos_per_day, daily_times,
                           start_days, description, thumbnail_path)
     # 返回响应给客户端
     return jsonify(
@@ -756,6 +889,11 @@ def run_async_function(type,id,status_queue):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             loop.run_until_complete(bilibili_cookie_gen(id,status_queue))
+            loop.close()
+        case '6':
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(baijiahao_cookie_gen(id,status_queue))
             loop.close()
 
 # SSE 流生成器函数
