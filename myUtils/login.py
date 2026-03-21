@@ -71,7 +71,7 @@ def get_baijiahao_options():
 
 
 async def click_baijiahao_login_button(page):
-    """尝试多种方式点击百家号登录按钮"""
+    """尝试多种方式点击百家号登录按钮，带详细调试信息"""
     selectors = [
         ("text", "登录/注册百家号"),
         ("text", "登录", {"exact": True}),
@@ -80,12 +80,60 @@ async def click_baijiahao_login_button(page):
 
     for selector_type, *args in selectors:
         try:
+            print(f"🔍 尝试选择器: {selector_type}, 参数: {args}")
+
             if selector_type == "text":
-                await page.get_by_text(*args).click(timeout=5000)
+                element = page.get_by_text(*args)
+                count = await element.count()
+                print(f"   找到 {count} 个匹配元素")
+
+                if count > 0:
+                    # 打印第一个元素的文本内容
+                    first_text = await element.first.text_content()
+                    print(f"   第一个元素文本: '{first_text}'")
+
+                    # 打印元素位置
+                    bbox = await element.first.bounding_box()
+                    print(f"   元素位置: {bbox}")
+
+                await element.first.click(timeout=5000)
+
             elif selector_type == "role":
-                await page.get_by_role(*args).click(timeout=5000)
+                element = page.get_by_role(*args)
+                count = await element.count()
+                print(f"   找到 {count} 个匹配元素")
+                await element.first.click(timeout=5000)
+
             print(f"✅ 成功点击登录按钮 (选择器: {selector_type})")
+
+            # 等待模态窗口出现
+            print("⏳ 等待模态窗口出现...")
+            await page.wait_for_timeout(3000)
+
+            # 检查当前页面状态
+            current_url = page.url
+            print(f"   当前URL: {current_url}")
+
+            # 检查是否有模态窗口
+            modal_selectors = [
+                "div[class*='modal']:visible",
+                "div[class*='dialog']:visible",
+                "div[class*='popup']:visible",
+                "div[class*='qrcode']:visible",
+                ".tang-pass-qrcode:visible",
+            ]
+
+            print("🔍 检查模态窗口...")
+            for modal_sel in modal_selectors:
+                modal_count = await page.locator(modal_sel).count()
+                print(f"   {modal_sel}: {modal_count} 个")
+                if modal_count > 0:
+                    print(f"✅ 检测到模态窗口 (选择器: {modal_sel})")
+                    return True
+
+            print("⚠️ 未检测到模态窗口，但点击成功")
             return True
+
         except Exception as e:
             print(f"⚠️ 选择器 {selector_type} 失败: {e}")
             continue
@@ -94,26 +142,37 @@ async def click_baijiahao_login_button(page):
 
 
 async def get_baijiahao_qrcode_src(page):
-    """获取百家号二维码图片地址"""
+    """获取百家号二维码图片地址，带详细调试信息"""
     selectors = [
-        ".tang-pass-qrcode-img",
+        "div[class*='modal'] img[src*='qr']",
+        "div[class*='dialog'] img[src*='qr']",
+        "div[class*='popup'] img[src*='qr']",
+        "div[class*='qrcode'] img",
+        ".tang-pass-qrcode img",
         ".qrcode-img img",
         "img[src*='qr']",
         "img[src*='qrcode']",
     ]
 
+    print("🔍 开始查找二维码图片...")
     for selector in selectors:
         try:
             img = page.locator(selector)
-            if await img.count() > 0:
-                src = await img.get_attribute("src", timeout=5000)
+            count = await img.count()
+            print(f"   选择器 '{selector}': 找到 {count} 个元素")
+
+            if count > 0:
+                src = await img.first.get_attribute("src", timeout=5000)
+                print(f"   第一个元素src: {src}")
+
                 if src:
                     print(f"✅ 获取二维码成功 (选择器: {selector})")
                     return src
         except Exception as e:
-            print(f"⚠️ 选择器 {selector} 失败: {e}")
+            print(f"   选择器 '{selector}' 失败: {e}")
             continue
 
+    print("❌ 所有选择器都失败")
     return None
 
 
