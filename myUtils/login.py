@@ -143,6 +143,106 @@ async def wait_baijiahao_login_success(page, timeout=200):
     return False
 
 
+async def baijiahao_cookie_gen(id, status_queue):
+    """百家号登录，生成cookie"""
+    async with async_playwright() as playwright:
+        options = get_baijiahao_options()
+        browser = await playwright.chromium.launch(**options)
+        context = await browser.new_context()
+        context = await set_init_script(context)
+        page = await context.new_page()
+
+        print("✅ 正在访问百家号登录页面...")
+        await page.goto("https://baijiahao.baidu.com/builder/theme/bjh/login")
+        await page.wait_for_load_state("domcontentloaded")
+
+        # 检查是否需要登录（基于页面内容，不是URL）
+        login_button = page.get_by_text("登录/注册百家号")
+        if await login_button.count() == 0:
+            # 没有登录按钮，检查是否在创作者中心
+            if "builder/rc" in page.url:
+                print("✅ 已登录，直接保存cookie")
+                uuid_v1 = uuid.uuid1()
+                cookies_dir = Path(BASE_DIR / "cookiesFile")
+                cookies_dir.mkdir(exist_ok=True)
+                await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
+                result = await check_cookie(6, f"{uuid_v1}.json")
+                if not result:
+                    status_queue.put("500")
+                    await page.close()
+                    await context.close()
+                    await browser.close()
+                    return None
+                insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
+                status_queue.put("200")
+                return
+
+        # 需要登录，点击登录按钮
+        print("✅ 正在点击登录按钮...")
+        if not await click_baijiahao_login_button(page):
+            print("❌ 点击登录按钮失败")
+            status_queue.put("500")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
+
+        # 获取二维码
+        print("✅ 正在获取二维码...")
+        src = await get_baijiahao_qrcode_src(page)
+        if not src:
+            print("❌ 获取二维码失败")
+            status_queue.put("500")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
+
+        print(f"✅ 二维码地址: {src}")
+        status_queue.put(src)
+
+        # 等待登录成功
+        print("✅ 等待用户扫码登录...")
+        try:
+            if not await wait_baijiahao_login_success(page):
+                print("❌ 登录超时")
+                status_queue.put("500")
+                await page.close()
+                await context.close()
+                await browser.close()
+                return None
+        except Exception as e:
+            print(f"❌ 登录失败: {e}")
+            status_queue.put("500")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
+
+        # 保存cookie
+        uuid_v1 = uuid.uuid1()
+        cookies_dir = Path(BASE_DIR / "cookiesFile")
+        cookies_dir.mkdir(exist_ok=True)
+        await context.storage_state(path=cookies_dir / f"{uuid_v1}.json")
+
+        # 验证cookie
+        result = await check_cookie(6, f"{uuid_v1}.json")
+        if not result:
+            status_queue.put("500")
+            await page.close()
+            await context.close()
+            await browser.close()
+            return None
+
+        await page.close()
+        await context.close()
+        await browser.close()
+
+        # 插入用户信息
+        insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
+        status_queue.put("200")
+
+
 # 抖音登录
 async def douyin_cookie_gen(id, status_queue):
     url_changed_event = asyncio.Event()
@@ -566,8 +666,8 @@ async def bilibili_cookie_gen(id, status_queue):
         status_queue.put("200")
 
 
-# 百家号登录
-async def baijiahao_cookie_gen(id, status_queue):
+# 百家号登录（旧版，保留备用）
+async def _baijiahao_cookie_gen_legacy(id, status_queue):
     async with async_playwright() as playwright:
         options = {
             "args": ["--lang en-GB"],
