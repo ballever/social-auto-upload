@@ -1,5 +1,13 @@
 <template>
   <div class="publish-center">
+    <!-- 模式切换提示 -->
+    <div class="mode-switch-hint">
+      <el-button type="primary" plain @click="router.push('/one-click-publish')">
+        <el-icon><Promotion /></el-icon>
+        切换到一键多平台发布 →
+      </el-button>
+    </div>
+
     <!-- Tab管理区域 -->
     <div class="tab-management">
       <div class="tab-header">
@@ -540,8 +548,11 @@
 
 <script setup>
 import { ref, reactive, computed } from 'vue'
-import { Upload, Plus, Close, Folder, Picture } from '@element-plus/icons-vue'
+import { useRouter } from 'vue-router'
+import { Upload, Plus, Close, Folder, Picture, Promotion } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
+
+const router = useRouter()
 import { useAccountStore } from '@/stores/account'
 import { useAppStore } from '@/stores/app'
 import { materialApi } from '@/api/material'
@@ -1124,6 +1135,12 @@ const batchPublish = async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
+  
+  // 模式切换提示
+  .mode-switch-hint {
+    margin-bottom: 15px;
+    text-align: right;
+  }
   
   // Tab管理区域
   .tab-management {

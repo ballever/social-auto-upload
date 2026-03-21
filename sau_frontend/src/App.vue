@@ -32,6 +32,10 @@
               <el-icon><Upload /></el-icon>
               <span>发布中心</span>
             </el-menu-item>
+            <el-menu-item index="/one-click-publish">
+              <el-icon><Promotion /></el-icon>
+              <span>一键发布</span>
+            </el-menu-item>
             <el-menu-item index="/about">
               <el-icon><DataAnalysis /></el-icon>
               <span>关于</span>
@@ -63,7 +67,7 @@ import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import {
   HomeFilled, User, DataAnalysis,
-  Fold, Picture, Upload
+  Fold, Picture, Upload, Promotion
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
