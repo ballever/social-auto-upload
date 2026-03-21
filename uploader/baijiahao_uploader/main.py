@@ -99,6 +99,12 @@ class BaiJiaHaoVideo(object):
         self.proxy_setting = proxy_setting
         self.description = description  # 作品简介（可选）
 
+    async def random_delay(self, min_seconds=3, max_seconds=6):
+        """随机延时，模拟人类行为"""
+        delay = random.uniform(min_seconds, max_seconds)
+        baijiahao_logger.info(f"随机延时 {delay:.1f} 秒...")
+        await asyncio.sleep(delay)
+
     async def set_schedule_time(self, page, publish_date):
         """
         todo 时间选择，日后在处理 百家号的时间选择不准确，目前是随机
@@ -202,16 +208,22 @@ class BaiJiaHaoVideo(object):
                 baijiahao_logger.info("正在等待进入视频发布页面...")
                 await asyncio.sleep(0.1)
 
-        # 填充标题和话题
-        # 这里为了避免页面变化，故使用相对位置定位：作品标题父级右侧第一个元素的input子元素
-        await asyncio.sleep(1)
-        baijiahao_logger.info("正在填充标题和话题...")
-        await self.add_title_tags(page)
-
+        # 先等待视频上传完成
+        baijiahao_logger.info("等待视频上传完成...")
         upload_status = await self.uploading_video(page)
         if not upload_status:
             baijiahao_logger.error(f"发现上传出错了... 文件:{self.file_path}")
             raise
+        baijiahao_logger.success("视频上传完成，开始填写标题和标签...")
+
+        # 处理可能出现的弹出框
+        await asyncio.sleep(2)
+        await self.handle_popup(page)
+
+        # 填充标题和话题
+        await asyncio.sleep(1)
+        baijiahao_logger.info("正在填充标题和话题...")
+        await self.add_title_tags(page)
 
         # 判断视频封面图是否生成成功
         while True:
@@ -223,13 +235,25 @@ class BaiJiaHaoVideo(object):
                 baijiahao_logger.info("等待封面生成...")
                 await asyncio.sleep(3)
 
+        await self.random_delay()  # 随机延时3-6秒
         await self.publish_video(page, self.publish_date)
         await page.wait_for_timeout(2000)
+
+        # 检测验证码弹窗
         if await page.locator(
             "div.passMod_dialog-container >> text=百度安全验证:visible"
         ).count():
-            baijiahao_logger.error("出现验证，退出")
-            raise Exception("出现验证，退出")
+            baijiahao_logger.warning("出现百度安全验证，请手动完成验证...")
+            await page.pause()  # 暂停浏览器，让用户手动完成
+            # 等待用户手动完成验证
+            try:
+                await page.wait_for_selector(
+                    "div.passMod_dialog-container", state="hidden", timeout=300000
+                )  # 5分钟超时
+                baijiahao_logger.success("验证已完成，继续发布流程...")
+            except:
+                baijiahao_logger.error("验证超时，请重新运行")
+                raise Exception("验证超时，请重新运行")
         await page.wait_for_url(
             "https://baijiahao.baidu.com/builder/rc/clue**", timeout=5000
         )
@@ -242,27 +266,49 @@ class BaiJiaHaoVideo(object):
         await context.close()
         await browser.close()
 
-    @async_retry(timeout=300)  # 例如，最多重试3次，超时时间为180秒
+    @async_retry(timeout=600)  # 增加超时时间到600秒，支持大文件上传
     async def uploading_video(self, page):
+        baijiahao_logger.info("等待上传进度条出现...")
+
+        # 首先等待进度条出现（表示开始上传）
         while True:
+            progress_container = page.locator(".progress-container")
+            if await progress_container.count():
+                baijiahao_logger.info("检测到上传进度条，开始监控上传进度...")
+                break
+
+            # 检查是否有上传失败提示
             upload_failed = await page.locator(
                 'div .cover-overlay:has-text("上传失败")'
             ).count()
             if upload_failed:
                 baijiahao_logger.error("发现上传出错了...")
-                # await self.handle_upload_error(page)  # 假设这是处理上传错误的函数
                 return False
 
-            uploading = await page.locator(
-                'div .cover-overlay:has-text("上传中")'
-            ).count()
-            if uploading:
-                baijiahao_logger.info("正在上传视频中...")
-                await asyncio.sleep(2)  # 等待2秒再次检查
-                continue
+            await asyncio.sleep(0.5)
 
-            # 检查上传是否成功
-            if not uploading and not upload_failed:
+        # 等待进度条消失（表示上传完成）
+        while True:
+            # 检查是否有上传失败提示
+            upload_failed = await page.locator(
+                'div .cover-overlay:has-text("上传失败")'
+            ).count()
+            if upload_failed:
+                baijiahao_logger.error("发现上传出错了...")
+                return False
+
+            # 检查进度条是否还存在
+            progress_container = page.locator(".progress-container")
+            if await progress_container.count():
+                # 获取进度百分比
+                progress_percent = page.locator(".progress-percent")
+                if await progress_percent.count():
+                    percent_text = await progress_percent.first.text_content()
+                    if percent_text:
+                        baijiahao_logger.info(f"上传进度: {percent_text}")
+                await asyncio.sleep(2)  # 等待2秒再次检查
+            else:
+                # 进度条消失，上传完成
                 baijiahao_logger.success("视频上传完毕")
                 return True
 
@@ -295,18 +341,83 @@ class BaiJiaHaoVideo(object):
 
     async def direct_publish(self, page):
         try:
-            publish_button = page.locator("button >> text=发布")
+            # 使用data-testid定位"发布"按钮，避免与"定时发布"按钮冲突
+            publish_button = page.locator('[data-testid="publish-btn"]')
             if await publish_button.count():
+                # 点击发布前等待5秒
+                baijiahao_logger.info("准备点击发布按钮，等待5秒...")
+                await asyncio.sleep(5)
                 await publish_button.click()
+                baijiahao_logger.info("已点击发布按钮")
+                await self.random_delay()  # 点击后随机延时3-6秒
         except Exception as e:
             baijiahao_logger.error(f"直接发布视频失败: {e}")
             raise  # 重新抛出异常，让重试装饰器捕获
 
+    async def handle_popup(self, page):
+        """
+        处理功能升级提示弹出框
+        弹出框内容：标题编辑功能升级上线！
+        关闭按钮：我知道了
+        """
+        try:
+            # 检查是否有弹出框
+            popup = page.locator('text="标题编辑功能升级上线！"')
+            if await popup.count() > 0:
+                baijiahao_logger.info("检测到功能升级提示弹出框")
+
+                # 点击"我知道了"按钮
+                close_button = page.locator('button:has-text("我知道了")')
+                if await close_button.count() > 0:
+                    await close_button.click()
+                    baijiahao_logger.info("已关闭功能升级提示弹出框")
+                    await asyncio.sleep(0.5)
+        except Exception as e:
+            baijiahao_logger.warning(f"处理弹出框时出错: {e}")
+
     async def add_title_tags(self, page):
-        title_container = page.get_by_placeholder("添加标题获得更多推荐")
-        if len(self.title) <= 8:
-            self.title += " 你不知道的"
-        await title_container.fill(self.title[:30])
+        try:
+            # 定位标题容器（使用aria-placeholder和contenteditable属性）
+            title_container = page.locator(
+                '[contenteditable="true"][aria-placeholder="添加标题获得更多推荐"]'
+            )
+            await title_container.wait_for(timeout=15000)
+            baijiahao_logger.info("找到标题容器")
+
+            # 定位容器内的P元素（实际输入位置）
+            p_element = title_container.locator("p")
+            await p_element.wait_for(timeout=5000)
+            baijiahao_logger.info("找到标题输入元素")
+
+            # 点击P元素激活输入框
+            await p_element.click()
+            await asyncio.sleep(0.5)
+
+            # 清空现有内容
+            await page.keyboard.press("Control+KeyA")
+            await page.keyboard.press("Delete")
+            await asyncio.sleep(0.3)
+
+            # 填写标题
+            if len(self.title) <= 8:
+                self.title += " 你不知道的"
+            await page.keyboard.type(self.title[:30])
+            baijiahao_logger.info(f"已填写标题: {self.title[:30]}")
+            await self.random_delay()  # 随机延时3-6秒
+
+            # 填写标签（用#包裹）
+            if self.tags:
+                await page.keyboard.type(" ")
+                for tag in self.tags:
+                    tag_text = f"#{tag}#"
+                    await page.keyboard.type(tag_text)
+                    await asyncio.sleep(0.3)
+                baijiahao_logger.info(f"已填写标签: {self.tags}")
+                await self.random_delay()  # 随机延时3-6秒
+
+        except Exception as e:
+            baijiahao_logger.error(f"填写标题和标签失败: {e}")
+            raise
 
     async def main(self):
         async with async_playwright() as playwright:
