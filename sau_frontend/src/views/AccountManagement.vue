@@ -431,6 +431,77 @@
             </div>
           </div>
         </el-tab-pane>
+        
+        <el-tab-pane label="百家号" name="baijiahao">
+          <div class="account-list-container">
+            <div class="account-search">
+              <el-input
+                v-model="searchKeyword"
+                placeholder="输入名称或账号搜索"
+                prefix-icon="Search"
+                clearable
+                @clear="handleSearch"
+                @input="handleSearch"
+              />
+              <div class="action-buttons">
+                <el-button type="primary" @click="handleAddAccount">添加账号</el-button>
+                <el-button type="warning" @click="fetchAccounts" :loading="appStore.isAccountRefreshing">
+                  <el-icon :class="{ 'is-loading': appStore.isAccountRefreshing }"><Refresh /></el-icon>
+                  <span v-if="appStore.isAccountRefreshing">验证中</span>
+                  <span v-else>验证全部</span>
+                </el-button>
+              </div>
+            </div>
+            
+            <div v-if="filteredBaijiahaoAccounts.length > 0" class="account-list">
+              <el-table :data="filteredBaijiahaoAccounts" style="width: 100%">
+                <el-table-column label="头像" width="80">
+                  <template #default="scope">
+                    <el-avatar :src="getDefaultAvatar(scope.row.name)" :size="40" />
+                  </template>
+                </el-table-column>
+                <el-table-column prop="name" label="名称" width="180" />
+                <el-table-column prop="platform" label="平台">
+                  <template #default="scope">
+                    <el-tag
+                      :type="getPlatformTagType(scope.row.platform)"
+                      effect="plain"
+                    >
+                      {{ scope.row.platform }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="status" label="状态">
+                  <template #default="scope">
+                    <el-tag
+                      :type="getStatusTagType(scope.row.status)"
+                      effect="plain"
+                      :class="{'clickable-status': isStatusClickable(scope.row.status)}"
+                      @click="handleStatusClick(scope.row)"
+                    >
+                      <el-icon :class="scope.row.status === '验证中' ? 'is-loading' : ''" v-if="scope.row.status === '验证中'">
+                        <Loading />
+                      </el-icon>
+                      {{ scope.row.status }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作">
+                  <template #default="scope">
+                    <el-button size="small" @click="handleEdit(scope.row)">编辑</el-button>
+                    <el-button size="small" type="primary" :icon="Download" @click="handleDownloadCookie(scope.row)">下载Cookie</el-button>
+                    <el-button size="small" type="info" :icon="Upload" @click="handleUploadCookie(scope.row)">上传Cookie</el-button>
+                    <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+            
+            <div v-else class="empty-data">
+              <el-empty description="暂无百家号账号数据" />
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </div>
     
@@ -456,6 +527,7 @@
             <el-option label="视频号" value="视频号" />
             <el-option label="小红书" value="小红书" />
             <el-option label="Bilibili" value="Bilibili" />
+            <el-option label="百家号" value="百家号" />
           </el-select>
         </el-form-item>
         <el-form-item label="名称" prop="name">
@@ -575,14 +647,15 @@ const getPlatformTagType = (platform) => {
     '抖音': 'danger',
     '视频号': 'warning',
     '小红书': 'info',
-    'Bilibili': 'primary'
+    'Bilibili': 'primary',
+    '百家号': 'warning'
   }
   return typeMap[platform] || 'info'
 }
 
-// 判断状态是否可点击（异常状态可点击）
+// 判断状态是否可点击（正常和异常状态可点击，验证中不可点击）
 const isStatusClickable = (status) => {
-  return status === '异常'; // 只有异常状态可点击，验证中不可点击
+  return status === '正常' || status === '异常'; // 正常和异常状态可点击，验证中不可点击
 }
 
 // 获取状态标签类型
@@ -597,10 +670,39 @@ const getStatusTagType = (status) => {
 }
 
 // 处理状态点击事件
-const handleStatusClick = (row) => {
+let isProcessingClick = false
+const handleStatusClick = async (row) => {
+  if (isProcessingClick) {
+    console.log('点击处理中，请稍候...')
+    return
+  }
+
   if (isStatusClickable(row.status)) {
-    // 触发重新登录流程
-    handleReLogin(row)
+    isProcessingClick = true
+
+    try {
+      if (row.status === '正常') {
+        // 正常状态 → 后台验证
+        ElMessage.info('正在验证账号...')
+        const res = await accountApi.validateAccount(row.id)
+        if (res.code === 200) {
+          accountStore.updateAccount(row.id, {
+            ...row,
+            status: res.data?.status || '正常'
+          })
+          ElMessage.success('验证成功')
+        } else {
+          ElMessage.error(res.msg || '验证失败')
+        }
+      } else if (row.status === '异常') {
+        // 异常状态 → 扫码重新登录
+        handleReLogin(row)
+      }
+    } finally {
+      setTimeout(() => {
+        isProcessingClick = false
+      }, 500)
+    }
   }
 }
 
@@ -631,6 +733,10 @@ const filteredXiaohongshuAccounts = computed(() => {
 
 const filteredBilibiliAccounts = computed(() => {
   return filteredAccounts.value.filter(account => account.platform === 'Bilibili')
+})
+
+const filteredBaijiahaoAccounts = computed(() => {
+  return filteredAccounts.value.filter(account => account.platform === '百家号')
 })
 
 // 搜索处理
@@ -774,8 +880,8 @@ const handleUploadCookie = (row) => {
       const result = await http.upload('/uploadCookie', formData)
 
       ElMessage.success('Cookie文件上传成功')
-      // 刷新账号列表以显示更新
-      fetchAccounts()
+      // 刷新账号列表以显示更新（使用快速获取，避免验证所有账号）
+      fetchAccountsQuick()
     } catch (error) {
       ElMessage.error('Cookie文件上传失败')
     } finally {
@@ -819,6 +925,7 @@ const getDefaultAvatar = (name) => {
 
 // SSE事件源对象
 let eventSource = null
+let isSSEConnected = false
 
 // 关闭SSE连接
 const closeSSEConnection = () => {
@@ -826,12 +933,16 @@ const closeSSEConnection = () => {
     eventSource.close()
     eventSource = null
   }
+  isSSEConnected = false
 }
 
 // 建立SSE连接
 const connectSSE = (platform, name) => {
-  // 关闭可能存在的连接
-  closeSSEConnection()
+  // 如果已经连接，先关闭
+  if (isSSEConnected) {
+    console.log('SSE连接已存在，先关闭旧连接')
+    closeSSEConnection()
+  }
 
   // 设置连接状态
   sseConnecting.value = true
@@ -844,7 +955,8 @@ const connectSSE = (platform, name) => {
     '视频号': '2',
     '抖音': '3',
     '快手': '4',
-    'Bilibili': '5'
+    'Bilibili': '5',
+    '百家号': '6'
   }
 
   const type = platformTypeMap[platform] || '1'
@@ -854,17 +966,33 @@ const connectSSE = (platform, name) => {
   const url = `${baseUrl}/login?type=${type}&id=${encodeURIComponent(name)}`
 
   eventSource = new EventSource(url)
+  isSSEConnected = true
 
   // 监听消息
   eventSource.onmessage = (event) => {
     const data = event.data
+    console.log('收到SSE消息:', data)
+
+    // 检查是否是特殊消息
+    if (data.includes('登录流程已在进行中')) {
+      console.log('检测到重复登录请求，关闭连接')
+      ElMessage.warning('登录流程已在进行中，请勿重复操作')
+      closeSSEConnection()
+      sseConnecting.value = false
+      return
+    }
 
     // 如果还没有二维码数据，且数据长度较长，认为是二维码
     if (!qrCodeData.value && data.length > 100) {
       try {
         if (data.startsWith('data:image')) {
+          // 已经是base64格式，直接使用
+          qrCodeData.value = data
+        } else if (data.startsWith('http://') || data.startsWith('https://')) {
+          // 是URL格式，直接使用
           qrCodeData.value = data
         } else {
+          // 假设是base64数据，添加前缀
           qrCodeData.value = `data:image/png;base64,${data}`
         }
       } catch (error) {
@@ -896,8 +1024,8 @@ const connectSSE = (platform, name) => {
               duration: 0
             })
 
-            // 触发刷新操作
-            fetchAccounts().then(() => {
+            // 触发刷新操作（使用快速获取，避免验证所有账号）
+            fetchAccountsQuick().then(() => {
               // 刷新完成后关闭提示
               ElMessage.closeAll()
               ElMessage.success('账号信息已更新')
@@ -918,10 +1046,34 @@ const connectSSE = (platform, name) => {
     }
   }
 
+  // 监听打开事件
+  eventSource.onopen = () => {
+    console.log('SSE连接已建立')
+  }
+
   // 监听错误
   eventSource.onerror = (error) => {
     console.error('SSE连接错误:', error)
-    ElMessage.error('连接服务器失败，请稍后再试')
+    
+    // 如果已经收到成功或失败的状态码，不再显示错误消息
+    if (loginStatus.value === '200' || loginStatus.value === '500') {
+      console.log('已收到最终状态码，忽略连接关闭错误')
+      // 立即关闭连接，防止自动重连
+      closeSSEConnection()
+      sseConnecting.value = false
+      return
+    }
+    
+    // 检查连接状态
+    if (eventSource.readyState === EventSource.CLOSED) {
+      console.log('SSE连接已关闭，不再重连')
+      ElMessage.error('连接已关闭，请重新尝试')
+    } else {
+      console.log('SSE连接出错，关闭连接')
+      ElMessage.error('连接服务器失败，请稍后再试')
+    }
+    
+    // 立即关闭连接，防止自动重连
     closeSSEConnection()
     sseConnecting.value = false
   }
@@ -943,7 +1095,8 @@ const submitAccountForm = () => {
             '视频号': 2,
             '抖音': 3,
             '快手': 4,
-            'Bilibili': 5
+            'Bilibili': 5,
+            '百家号': 6
           };
           const type = platformTypeMap[accountForm.platform] || 1;
 
