@@ -175,8 +175,11 @@ class KSVideo(object):
         await page.keyboard.press("Backspace")
         await page.keyboard.press("Control+KeyA")
         await page.keyboard.press("Delete")
-        kuaishou_logger.info("filling new  title")
+        kuaishou_logger.info("filling new title")
         await page.keyboard.type(self.title)
+        await page.keyboard.press("Enter")
+        kuaishou_logger.info("filling new description")
+        await page.keyboard.type(self.description)
         await page.keyboard.press("Enter")
 
         # 快手只能添加3个话题

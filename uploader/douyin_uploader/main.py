@@ -12,7 +12,9 @@ from utils.log import douyin_logger
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -20,14 +22,19 @@ async def cookie_auth(account_file):
         # 访问指定的 URL
         await page.goto("https://creator.douyin.com/creator-micro/content/upload")
         try:
-            await page.wait_for_url("https://creator.douyin.com/creator-micro/content/upload", timeout=5000)
+            await page.wait_for_url(
+                "https://creator.douyin.com/creator-micro/content/upload", timeout=5000
+            )
         except:
             print("[+] 等待5秒 cookie 失效")
             await context.close()
             await browser.close()
             return False
         # 2024.06.17 抖音创作者中心改版
-        if await page.get_by_text('手机号登录').count() or await page.get_by_text('扫码登录').count():
+        if (
+            await page.get_by_text("手机号登录").count()
+            or await page.get_by_text("扫码登录").count()
+        ):
             print("[+] 等待5秒 cookie 失效")
             return False
         else:
@@ -40,7 +47,9 @@ async def douyin_setup(account_file, handle=False):
         if not handle:
             # Todo alert message
             return False
-        douyin_logger.info('[+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件')
+        douyin_logger.info(
+            "[+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件"
+        )
         await douyin_cookie_gen(account_file)
     return True
 
@@ -48,8 +57,8 @@ async def douyin_setup(account_file, handle=False):
 async def douyin_cookie_gen(account_file):
     async with async_playwright() as playwright:
         options = {
-            'headless': LOCAL_CHROME_HEADLESS,
-            'channel': 'chrome',
+            "headless": LOCAL_CHROME_HEADLESS,
+            "channel": "chrome",
         }
         # Make sure to run headed.
         browser = await playwright.chromium.launch(**options)
@@ -65,13 +74,24 @@ async def douyin_cookie_gen(account_file):
 
 
 class DouYinVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, thumbnail_path=None, productLink='', productTitle='', description=None):
+    def __init__(
+        self,
+        title,
+        file_path,
+        tags,
+        publish_date: datetime,
+        account_file,
+        thumbnail_path=None,
+        productLink="",
+        productTitle="",
+        description=None,
+    ):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
         self.publish_date = publish_date
         self.account_file = account_file
-        self.date_format = '%Y年%m月%d日 %H:%M'
+        self.date_format = "%Y年%m月%d日 %H:%M"
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
         self.thumbnail_path = thumbnail_path
@@ -96,15 +116,23 @@ class DouYinVideo(object):
         await asyncio.sleep(1)
 
     async def handle_upload_error(self, page):
-        douyin_logger.info('视频出错了，重新上传中')
-        await page.locator('div.progress-div [class^="upload-btn-input"]').set_input_files(self.file_path)
+        douyin_logger.info("视频出错了，重新上传中")
+        await page.locator(
+            'div.progress-div [class^="upload-btn-input"]'
+        ).set_input_files(self.file_path)
 
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
         if self.local_executable_path:
-            browser = await playwright.chromium.launch(headless=self.headless, executable_path=self.local_executable_path, channel="chrome")
+            browser = await playwright.chromium.launch(
+                headless=self.headless,
+                executable_path=self.local_executable_path,
+                channel="chrome",
+            )
         else:
-            browser = await playwright.chromium.launch(headless=self.headless, channel="chrome")
+            browser = await playwright.chromium.launch(
+                headless=self.headless, channel="chrome"
+            )
         # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(storage_state=f"{self.account_file}")
         context = await set_init_script(context)
@@ -113,19 +141,27 @@ class DouYinVideo(object):
         page = await context.new_page()
         # 访问指定的 URL
         await page.goto("https://creator.douyin.com/creator-micro/content/upload")
-        douyin_logger.info(f'[+]正在上传-------{self.title}.mp4')
+        douyin_logger.info(f"[+]正在上传-------{self.title}.mp4")
         # 等待页面跳转到指定的 URL，没进入，则自动等待到超时
-        douyin_logger.info(f'[-] 正在打开主页...')
-        await page.wait_for_url("https://creator.douyin.com/creator-micro/content/upload")
+        douyin_logger.info(f"[-] 正在打开主页...")
+        await page.wait_for_url(
+            "https://creator.douyin.com/creator-micro/content/upload"
+        )
+        # 上传前等待5秒
+        await asyncio.sleep(5)
         # 点击 "上传视频" 按钮
-        await page.locator("div[class^='container'] input").set_input_files(self.file_path)
+        await page.locator("div[class^='container'] input").set_input_files(
+            self.file_path
+        )
 
         # 等待页面跳转到指定的 URL 2025.01.08修改在原有基础上兼容两种页面
         while True:
             try:
                 # 尝试等待第一个 URL
                 await page.wait_for_url(
-                    "https://creator.douyin.com/creator-micro/content/publish?enter_from=publish_page", timeout=3000)
+                    "https://creator.douyin.com/creator-micro/content/publish?enter_from=publish_page",
+                    timeout=3000,
+                )
                 douyin_logger.info("[+] 成功进入version_1发布页面!")
                 break  # 成功进入页面后跳出循环
             except Exception:
@@ -133,7 +169,8 @@ class DouYinVideo(object):
                     # 如果第一个 URL 超时，再尝试等待第二个 URL
                     await page.wait_for_url(
                         "https://creator.douyin.com/creator-micro/content/post/video?enter_from=publish_page",
-                        timeout=3000)
+                        timeout=3000,
+                    )
                     douyin_logger.info("[+] 成功进入version_2发布页面!")
 
                     break  # 成功进入页面后跳出循环
@@ -143,7 +180,7 @@ class DouYinVideo(object):
         # 填充标题和话题
         # 检查是否存在包含输入框的元素
         await asyncio.sleep(1)
-        douyin_logger.info(f'  [-] 正在填充标题和话题...')
+        douyin_logger.info(f"  [-] 正在填充标题和话题...")
 
         # 使用更简单准确的定位方式：找到包含"作品标题"的placeholder的input
         title_container = page.locator('input[placeholder*="作品标题"]')
@@ -165,39 +202,71 @@ class DouYinVideo(object):
 
         # 填充简介和话题（共用同一个输入框）
         print(f"  [DEBUG] 开始执行简介和话题填充逻辑")
-        css_selector = ".zone-container"
-        print(f"  [=] 尝试定位简介和话题输入框: {css_selector}")
-        editor_count = await page.locator(css_selector).count()
-        print(f"  [=] 找到 {editor_count} 个输入框")
+
+        # 使用更精确的定位方式
+        editor_selector = '[data-slate-editor="true"]'
+        editor_count = await page.locator(editor_selector).count()
+        print(f"  [=] 找到 {editor_count} 个编辑器")
 
         if editor_count > 0:
             print(f"  [+] 开始填充简介和话题...")
-            # 先点击输入框确保激活
-            await page.locator(css_selector).first.click()
-            await asyncio.sleep(0.5)  # 等待输入框激活
+            editor = page.locator(editor_selector).first
 
+            # 先点击编辑器激活
+            await editor.click()
+            await asyncio.sleep(0.3)
+
+            # 使用 JavaScript 直接设置内容
             # 先输入简介（如果有）
             if self.description:
-                print(f"  [=] 输入简介: {self.description[:50]}...")
-                await page.type(css_selector, self.description)
-                print(f"  [+] 简介输入完成")
+                print(f"  [=] 添加简介: {self.description[:50]}...")
+                # 按换行符分割文本，每段之间按 Enter 键换行
+                desc_lines = self.description.split("\n")
+                for i, line in enumerate(desc_lines):
+                    if i > 0:
+                        # 换行
+                        await page.keyboard.press("Enter")
+                        await asyncio.sleep(0.1)
+                    await page.keyboard.type(line)
+                    await asyncio.sleep(0.1)
+                await asyncio.sleep(0.2)
 
-            # 输入话题标签
-            for index, tag in enumerate(self.tags, start=1):
-                print(f"  [=] 添加话题 {index}/{len(self.tags)}: #{tag}")
-                # 如果有简介，先换行
-                if self.description or index > 1:
-                    await page.press(css_selector, "Enter")
-                await page.type(css_selector, "#" + tag)
-                await page.press(css_selector, "Space")
-            douyin_logger.info(f'总共添加{len(self.tags)}个话题')
+            # 添加话题
+            for tag in self.tags:
+                print(f"  [=] 添加话题: #{tag}")
+                # 先按回车换行
+                await page.keyboard.press("Enter")
+                await asyncio.sleep(0.2)
+                # 输入话题
+                await page.keyboard.type("#" + tag)
+                await asyncio.sleep(0.2)
+                # 按空格激活话题标签
+                await page.keyboard.press("Space")
+                await asyncio.sleep(0.2)
+
+            # 填充完成后检查编辑器内容
+            print(f"  [DEBUG] 填充完成后检查编辑器内容...")
+            editor_html = await page.evaluate(
+                """(selector) => {
+                    const editor = document.querySelector(selector);
+                    return editor ? editor.innerHTML : 'not found';
+                }""",
+                editor_selector,
+            )
+            print(f"  [DEBUG] 编辑器内容: {editor_html[:200]}...")
+
+            douyin_logger.info(f"总共添加{len(self.tags)}个话题")
         else:
-            print(f"  [!] 未找到简介和话题输入框，跳过话题填充")
+            print(f"  [!] 未找到编辑器，跳过话题填充")
+
+        # 等待视频上传完成
         while True:
             # 判断重新上传按钮是否存在，如果不存在，代表视频正在上传，则等待
             try:
                 #  新版：定位重新上传
-                number = await page.locator('[class^="long-card"] div:has-text("重新上传")').count()
+                number = await page.locator(
+                    '[class^="long-card"] div:has-text("重新上传")'
+                ).count()
                 if number > 0:
                     douyin_logger.success("  [-]视频上传完毕")
                     break
@@ -205,7 +274,9 @@ class DouYinVideo(object):
                     douyin_logger.info("  [-] 正在上传视频中...")
                     await asyncio.sleep(2)
 
-                    if await page.locator('div.progress-div > div:has-text("上传失败")').count():
+                    if await page.locator(
+                        'div.progress-div > div:has-text("上传失败")'
+                    ).count():
                         douyin_logger.error("  [-] 发现上传出错了... 准备重试")
                         await self.handle_upload_error(page)
             except:
@@ -213,48 +284,47 @@ class DouYinVideo(object):
                 await asyncio.sleep(2)
 
         if self.productLink and self.productTitle:
-            douyin_logger.info(f'  [-] 正在设置商品链接...')
+            douyin_logger.info(f"  [-] 正在设置商品链接...")
             await self.set_product_link(page, self.productLink, self.productTitle)
-            douyin_logger.info(f'  [+] 完成设置商品链接...')
-        
-        #上传视频封面
+            douyin_logger.info(f"  [+] 完成设置商品链接...")
+
+        # 上传视频封面
         await self.set_thumbnail(page, self.thumbnail_path)
 
         # 更换可见元素
         await self.set_location(page, "")
 
-
         # 頭條/西瓜
-        third_part_element = '[class^="info"] > [class^="first-part"] div div.semi-switch'
-        # 定位是否有第三方平台
+        third_part_element = (
+            '[class^="info"] > [class^="first-part"] div div.semi-switch'
+        )
         if await page.locator(third_part_element).count():
-            # 检测是否是已选中状态
-            if 'semi-switch-checked' not in await page.eval_on_selector(third_part_element, 'div => div.className'):
-                await page.locator(third_part_element).locator('input.semi-switch-native-control').click()
+            if "semi-switch-checked" not in await page.eval_on_selector(
+                third_part_element, "div => div.className"
+            ):
+                await (
+                    page.locator(third_part_element)
+                    .locator("input.semi-switch-native-control")
+                    .click()
+                )
 
+        # 定时发布
         if self.publish_date != 0:
             await self.set_schedule_time_douyin(page, self.publish_date)
 
-        # 判断视频是否发布成功
-        while True:
-            # 判断视频是否发布成功
-            try:
-                publish_button = page.get_by_role('button', name="发布", exact=True)
-                if await publish_button.count():
-                    await publish_button.click()
-                await page.wait_for_url("https://creator.douyin.com/creator-micro/content/manage**",
-                                        timeout=3000)  # 如果自动跳转到作品页面，则代表发布成功
-                douyin_logger.success("  [-]视频发布成功")
-                break
-            except:
-                # 尝试处理封面问题
-                await self.handle_auto_video_cover(page)
-                douyin_logger.info("  [-] 视频正在发布中...")
-                await page.screenshot(full_page=True)
-                await asyncio.sleep(0.5)
+        # 点击发布按钮（注释掉）
+        print(f"  [DEBUG] 准备点击发布按钮...")
+
+        # 保持浏览器打开以便观察
+        await asyncio.sleep(5)
+        publish_button = page.get_by_role("button", name="发布", exact=True)
+        if await publish_button.count():
+            await publish_button.click()
+
+        print(f"  [DEBUG] 测试结束，浏览器保持打开...")
 
         await context.storage_state(path=self.account_file)  # 保存cookie
-        douyin_logger.success('  [-]cookie更新完毕！')
+        douyin_logger.success("  [-]cookie更新完毕！")
         await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
         await context.close()
@@ -298,23 +368,26 @@ class DouYinVideo(object):
 
     async def set_thumbnail(self, page: Page, thumbnail_path: str):
         if thumbnail_path:
-            douyin_logger.info('  [-] 正在设置视频封面...')
+            douyin_logger.info("  [-] 正在设置视频封面...")
             await page.click('text="选择封面"')
             await page.wait_for_selector("div.dy-creator-content-modal")
             await page.click('text="设置竖封面"')
             await page.wait_for_timeout(2000)  # 等待2秒
             # 定位到上传区域并点击
-            await page.locator("div[class^='semi-upload upload'] >> input.semi-upload-hidden-input").set_input_files(thumbnail_path)
+            await page.locator(
+                "div[class^='semi-upload upload'] >> input.semi-upload-hidden-input"
+            ).set_input_files(thumbnail_path)
             await page.wait_for_timeout(2000)  # 等待2秒
-            await page.locator("div#tooltip-container button:visible:has-text('完成')").click()
+            await page.locator(
+                "div#tooltip-container button:visible:has-text('完成')"
+            ).click()
             # finish_confirm_element = page.locator("div[class^='confirmBtn'] >> div:has-text('完成')")
             # if await finish_confirm_element.count():
             #     await finish_confirm_element.click()
             # await page.locator("div[class^='footer'] button:has-text('完成')").click()
-            douyin_logger.info('  [+] 视频封面设置完成！')
+            douyin_logger.info("  [+] 视频封面设置完成！")
             # 等待封面设置对话框关闭
-            await page.wait_for_selector("div.extractFooter", state='detached')
-            
+            await page.wait_for_selector("div.extractFooter", state="detached")
 
     async def set_location(self, page: Page, location: str = ""):
         if not location:
@@ -326,14 +399,18 @@ class DouYinVideo(object):
         await page.keyboard.press("Backspace")
         await page.wait_for_timeout(2000)
         await page.keyboard.type(location)
-        await page.wait_for_selector('div[role="listbox"] [role="option"]', timeout=5000)
+        await page.wait_for_selector(
+            'div[role="listbox"] [role="option"]', timeout=5000
+        )
         await page.locator('div[role="listbox"] [role="option"]').first.click()
 
     async def handle_product_dialog(self, page: Page, product_title: str):
         """处理商品编辑弹窗"""
 
         await page.wait_for_timeout(2000)
-        await page.wait_for_selector('input[placeholder="请输入商品短标题"]', timeout=10000)
+        await page.wait_for_selector(
+            'input[placeholder="请输入商品短标题"]', timeout=10000
+        )
         short_title_input = page.locator('input[placeholder="请输入商品短标题"]')
         if not await short_title_input.count():
             douyin_logger.error("[-] 未找到商品短标题输入框")
@@ -344,12 +421,14 @@ class DouYinVideo(object):
         await page.wait_for_timeout(1000)
 
         finish_button = page.locator('button:has-text("完成编辑")')
-        if 'disabled' not in await finish_button.get_attribute('class'):
+        if "disabled" not in await finish_button.get_attribute("class"):
             await finish_button.click()
             douyin_logger.debug("[+] 成功点击'完成编辑'按钮")
-            
+
             # 等待对话框关闭
-            await page.wait_for_selector('.semi-modal-content', state='hidden', timeout=5000)
+            await page.wait_for_selector(
+                ".semi-modal-content", state="hidden", timeout=5000
+            )
             return True
         else:
             douyin_logger.error("[-] '完成编辑'按钮处于禁用状态，尝试直接关闭对话框")
@@ -359,19 +438,28 @@ class DouYinVideo(object):
                 await cancel_button.click()
             else:
                 # 点击右上角的关闭按钮
-                close_button = page.locator('.semi-modal-close')
+                close_button = page.locator(".semi-modal-close")
                 await close_button.click()
-            
-            await page.wait_for_selector('.semi-modal-content', state='hidden', timeout=5000)
+
+            await page.wait_for_selector(
+                ".semi-modal-content", state="hidden", timeout=5000
+            )
             return False
-        
+
     async def set_product_link(self, page: Page, product_link: str, product_title: str):
         """设置商品链接功能"""
         await page.wait_for_timeout(2000)  # 等待2秒
         try:
             # 定位"添加标签"文本，然后向上导航到容器，再找到下拉框
-            await page.wait_for_selector('text=添加标签', timeout=10000)
-            dropdown = page.get_by_text('添加标签').locator("..").locator("..").locator("..").locator(".semi-select").first
+            await page.wait_for_selector("text=添加标签", timeout=10000)
+            dropdown = (
+                page.get_by_text("添加标签")
+                .locator("..")
+                .locator("..")
+                .locator("..")
+                .locator(".semi-select")
+                .first
+            )
             if not await dropdown.count():
                 douyin_logger.error("[-] 未找到标签下拉框")
                 return False
@@ -382,27 +470,29 @@ class DouYinVideo(object):
             ## 选择"购物车"选项
             await page.locator('[role="option"]:has-text("购物车")').click()
             douyin_logger.debug("[+] 成功选择'购物车'")
-            
+
             # 输入商品链接
             ## 等待商品链接输入框出现
-            await page.wait_for_selector('input[placeholder="粘贴商品链接"]', timeout=5000)
+            await page.wait_for_selector(
+                'input[placeholder="粘贴商品链接"]', timeout=5000
+            )
             # 输入
             input_field = page.locator('input[placeholder="粘贴商品链接"]')
             await input_field.fill(product_link)
             douyin_logger.debug(f"[+] 已输入商品链接: {product_link}")
-            
+
             # 点击"添加链接"按钮
             add_button = page.locator('span:has-text("添加链接")')
             ## 检查按钮是否可用（没有disable类）
-            button_class = await add_button.get_attribute('class')
-            if 'disable' in button_class:
+            button_class = await add_button.get_attribute("class")
+            if "disable" in button_class:
                 douyin_logger.error("[-] '添加链接'按钮不可用")
                 return False
             await add_button.click()
             douyin_logger.debug("[+] 成功点击'添加链接'按钮")
             ## 如果链接不可用
             await page.wait_for_timeout(2000)
-            error_modal = page.locator('text=未搜索到对应商品')
+            error_modal = page.locator("text=未搜索到对应商品")
             if await error_modal.count():
                 confirm_button = page.locator('button:has-text("确定")')
                 await confirm_button.click()
@@ -413,7 +503,7 @@ class DouYinVideo(object):
             # 填写商品短标题
             if not await self.handle_product_dialog(page, product_title):
                 return False
-            
+
             # 等待链接添加完成
             douyin_logger.debug("[+] 成功设置商品链接")
             return True
@@ -424,5 +514,3 @@ class DouYinVideo(object):
     async def main(self):
         async with async_playwright() as playwright:
             await self.upload(playwright)
-
-
