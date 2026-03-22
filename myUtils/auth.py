@@ -7,14 +7,23 @@ from xhs import XhsClient
 
 from conf import BASE_DIR, LOCAL_CHROME_HEADLESS
 from utils.base_social_media import set_init_script
-from utils.log import tencent_logger, kuaishou_logger, douyin_logger, bilibili_logger, baijiahao_logger
+from utils.log import (
+    tencent_logger,
+    kuaishou_logger,
+    douyin_logger,
+    bilibili_logger,
+    baijiahao_logger,
+    xiaohongshu_logger,
+)
 from pathlib import Path
 from uploader.xhs_uploader.main import sign_local
 
 
 async def cookie_auth_douyin(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -22,7 +31,9 @@ async def cookie_auth_douyin(account_file):
         # 访问指定的 URL
         await page.goto("https://creator.douyin.com/creator-micro/content/upload")
         try:
-            await page.wait_for_url("https://creator.douyin.com/creator-micro/content/upload", timeout=5000)
+            await page.wait_for_url(
+                "https://creator.douyin.com/creator-micro/content/upload", timeout=5000
+            )
             # 2024.06.17 抖音创作者中心改版
             # 判断
             # 等待“扫码登录”元素出现，超时 5 秒（如果 5 秒没出现，说明 cookie 有效）
@@ -42,7 +53,9 @@ async def cookie_auth_douyin(account_file):
 
 async def cookie_auth_tencent(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -50,7 +63,9 @@ async def cookie_auth_tencent(account_file):
         # 访问指定的 URL
         await page.goto("https://channels.weixin.qq.com/platform/post/create")
         try:
-            await page.wait_for_selector('div.title-name:has-text("微信小店")', timeout=5000)  # 等待5秒
+            await page.wait_for_selector(
+                'div.title-name:has-text("微信小店")', timeout=5000
+            )  # 等待5秒
             tencent_logger.error("[+] 等待5秒 cookie 失效")
             return False
         except:
@@ -60,7 +75,9 @@ async def cookie_auth_tencent(account_file):
 
 async def cookie_auth_ks(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -68,7 +85,9 @@ async def cookie_auth_ks(account_file):
         # 访问指定的 URL
         await page.goto("https://cp.kuaishou.com/article/publish/video")
         try:
-            await page.wait_for_selector("div.names div.container div.name:text('机构服务')", timeout=5000)  # 等待5秒
+            await page.wait_for_selector(
+                "div.names div.container div.name:text('机构服务')", timeout=5000
+            )  # 等待5秒
 
             kuaishou_logger.info("[+] 等待5秒 cookie 失效")
             return False
@@ -79,32 +98,45 @@ async def cookie_auth_ks(account_file):
 
 async def cookie_auth_xhs(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
-        # 创建一个新的页面
         page = await context.new_page()
-        # 访问指定的 URL
-        await page.goto("https://creator.xiaohongshu.com/creator-micro/content/upload")
+        xiaohongshu_logger.info("[+] 正在验证小红书cookie...")
+        await page.goto("https://creator.xiaohongshu.com/publish/publish?target=video")
         try:
-            await page.wait_for_url("https://creator.xiaohongshu.com/creator-micro/content/upload", timeout=5000)
+            await page.wait_for_load_state("networkidle", timeout=10000)
+            await page.wait_for_url("**/publish/publish?target=video**", timeout=10000)
+            xiaohongshu_logger.info("[+] 页面加载完成，正在检查登录状态...")
         except:
-            print("[+] 等待5秒 cookie 失效")
+            xiaohongshu_logger.error(
+                f"[+] 页面加载超时或URL不匹配，当前URL: {page.url}"
+            )
             await context.close()
             await browser.close()
             return False
-        # 2024.06.17 抖音创作者中心改版
-        if await page.get_by_text('手机号登录').count() or await page.get_by_text('扫码登录').count():
-            print("[+] 等待5秒 cookie 失效")
+        if (
+            await page.get_by_text("手机号登录").count()
+            or await page.get_by_text("扫码登录").count()
+        ):
+            xiaohongshu_logger.error("[+] cookie 失效，需要重新登录")
+            await context.close()
+            await browser.close()
             return False
         else:
-            print("[+] cookie 有效")
+            xiaohongshu_logger.success("[+] cookie 有效")
+            await context.close()
+            await browser.close()
             return True
 
 
 async def cookie_auth_bilibili(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -112,10 +144,10 @@ async def cookie_auth_bilibili(account_file):
         # 访问指定的 URL
         await page.goto("https://member.bilibili.com/platform/home")
         try:
-            await page.wait_for_load_state('networkidle', timeout=5000)
+            await page.wait_for_load_state("networkidle", timeout=5000)
             # 检查是否跳转到登录页面
             current_url = page.url
-            if 'passport.bilibili.com' in current_url:
+            if "passport.bilibili.com" in current_url:
                 bilibili_logger.error("[+] cookie 失效，需要扫码登录")
                 return False
             else:
@@ -131,7 +163,9 @@ async def cookie_auth_bilibili(account_file):
 async def cookie_auth_baijiahao(account_file):
     """验证百家号cookie是否有效"""
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         page = await context.new_page()
@@ -140,7 +174,7 @@ async def cookie_auth_baijiahao(account_file):
         await page.wait_for_timeout(5000)
 
         # 检查安全验证
-        if await page.locator('div.passMod_dialog-container:visible').count():
+        if await page.locator("div.passMod_dialog-container:visible").count():
             baijiahao_logger.error("Cookie失效: 出现安全验证")
             await page.close()
             await context.close()
@@ -186,12 +220,17 @@ async def check_cookie(type, file_path):
             return await cookie_auth_ks(Path(BASE_DIR / "cookiesFile" / file_path))
         # Bilibili
         case 5:
-            return await cookie_auth_bilibili(Path(BASE_DIR / "cookiesFile" / file_path))
+            return await cookie_auth_bilibili(
+                Path(BASE_DIR / "cookiesFile" / file_path)
+            )
         # 百家号
         case 6:
-            return await cookie_auth_baijiahao(Path(BASE_DIR / "cookiesFile" / file_path))
+            return await cookie_auth_baijiahao(
+                Path(BASE_DIR / "cookiesFile" / file_path)
+            )
         case _:
             return False
+
 
 # a = asyncio.run(check_cookie(1,"3a6cfdc0-3d51-11f0-8507-44e51723d63c.json"))
 # print(a)

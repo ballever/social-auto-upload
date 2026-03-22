@@ -13,7 +13,9 @@ from utils.log import kuaishou_logger
 
 async def cookie_auth(account_file):
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=LOCAL_CHROME_HEADLESS, channel="chrome")
+        browser = await playwright.chromium.launch(
+            headless=LOCAL_CHROME_HEADLESS, channel="chrome"
+        )
         context = await browser.new_context(storage_state=account_file)
         context = await set_init_script(context)
         # 创建一个新的页面
@@ -21,7 +23,9 @@ async def cookie_auth(account_file):
         # 访问指定的 URL
         await page.goto("https://cp.kuaishou.com/article/publish/video")
         try:
-            await page.wait_for_selector("div.names div.container div.name:text('机构服务')", timeout=5000)  # 等待5秒
+            await page.wait_for_selector(
+                "div.names div.container div.name:text('机构服务')", timeout=5000
+            )  # 等待5秒
 
             kuaishou_logger.info("[+] 等待5秒 cookie 失效")
             return False
@@ -35,7 +39,9 @@ async def ks_setup(account_file, handle=False):
     if not os.path.exists(account_file) or not await cookie_auth(account_file):
         if not handle:
             return False
-        kuaishou_logger.info('[+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件')
+        kuaishou_logger.info(
+            "[+] cookie文件不存在或已失效，即将自动打开浏览器，请扫码登录，登陆后会自动生成cookie文件"
+        )
         await get_ks_cookie(account_file)
     return True
 
@@ -43,11 +49,9 @@ async def ks_setup(account_file, handle=False):
 async def get_ks_cookie(account_file):
     async with async_playwright() as playwright:
         options = {
-            'args': [
-                '--lang en-GB'
-            ],
-            'headless': LOCAL_CHROME_HEADLESS,  # Set headless option here
-            'channel': 'chrome',
+            "args": ["--lang en-GB"],
+            "headless": LOCAL_CHROME_HEADLESS,  # Set headless option here
+            "channel": "chrome",
         }
         # Make sure to run headed.
         browser = await playwright.chromium.launch(**options)
@@ -63,13 +67,22 @@ async def get_ks_cookie(account_file):
 
 
 class KSVideo(object):
-    def __init__(self, title, file_path, tags, publish_date: datetime, account_file, description=None, thumbnail_path=None):
+    def __init__(
+        self,
+        title,
+        file_path,
+        tags,
+        publish_date: datetime,
+        account_file,
+        description=None,
+        thumbnail_path=None,
+    ):
         self.title = title  # 视频标题
         self.file_path = file_path
         self.tags = tags
         self.publish_date = publish_date
         self.account_file = account_file
-        self.date_format = '%Y-%m-%d %H:%M'
+        self.date_format = "%Y-%m-%d %H:%M"
         self.local_executable_path = LOCAL_CHROME_PATH
         self.headless = LOCAL_CHROME_HEADLESS
         self.description = description  # 作品简介（可选）
@@ -77,7 +90,39 @@ class KSVideo(object):
 
     async def handle_upload_error(self, page):
         kuaishou_logger.error("视频出错了，重新上传中")
-        await page.locator('div.progress-div [class^="upload-btn-input"]').set_input_files(self.file_path)
+        await page.locator(
+            'div.progress-div [class^="upload-btn-input"]'
+        ).set_input_files(self.file_path)
+
+    async def handle_guide_popup(self, page):
+        """处理教程弹窗"""
+        for _ in range(5):
+            try:
+                try:
+                    skip_button = page.locator(
+                        '[data-action="skip"], [aria-label="Skip"]'
+                    )
+                    await skip_button.click(timeout=2000)
+                    kuaishou_logger.info("已跳过教程弹窗")
+                    await asyncio.sleep(0.3)
+                    continue
+                except Exception:
+                    pass
+
+                try:
+                    next_button = page.locator('div:has-text("下一步")')
+                    await next_button.click(timeout=2000)
+                    kuaishou_logger.info("点击教程下一步")
+                    await asyncio.sleep(0.3)
+                    continue
+                except Exception:
+                    pass
+
+                return True
+            except Exception as e:
+                kuaishou_logger.debug(f"处理教程弹窗: {e}")
+                return True
+        return False
 
     async def upload(self, playwright: Playwright) -> None:
         # 使用 Chromium 浏览器启动一个浏览器实例
@@ -86,12 +131,11 @@ class KSVideo(object):
             browser = await playwright.chromium.launch(
                 headless=self.headless,
                 executable_path=self.local_executable_path,
-                channel="chrome"
+                channel="chrome",
             )
         else:
             browser = await playwright.chromium.launch(
-                headless=self.headless,
-                channel="chrome"
+                headless=self.headless, channel="chrome"
             )  # 创建一个浏览器上下文，使用指定的 cookie 文件
         context = await browser.new_context(storage_state=f"{self.account_file}")
         context = await set_init_script(context)
@@ -99,18 +143,19 @@ class KSVideo(object):
         page = await context.new_page()
         # 访问指定的 URL
         await page.goto("https://cp.kuaishou.com/article/publish/video")
-        kuaishou_logger.info('正在上传-------{}.mp4'.format(self.title))
+        kuaishou_logger.info("正在上传-------{}.mp4".format(self.title))
         # 等待页面跳转到指定的 URL，没进入，则自动等待到超时
-        kuaishou_logger.info('正在打开主页...')
+        kuaishou_logger.info("正在打开主页...")
         await page.wait_for_url("https://cp.kuaishou.com/article/publish/video")
         # 点击 "上传视频" 按钮
         upload_button = page.locator("button[class^='_upload-btn']")
-        await upload_button.wait_for(state='visible')  # 确保按钮可见
+        await upload_button.wait_for(state="visible")  # 确保按钮可见
 
         async with page.expect_file_chooser() as fc_info:
             await upload_button.click()
         file_chooser = await fc_info.value
         await file_chooser.set_files(self.file_path)
+        await self.handle_guide_popup(page)
 
         await asyncio.sleep(2)
 
@@ -163,6 +208,7 @@ class KSVideo(object):
         if retry_count == max_retries:
             kuaishou_logger.warning("超过最大重试次数，视频上传可能未完成。")
 
+        await asyncio.sleep(1)
         # 上传封面图片（如果提供了）
         if self.thumbnail_path:
             await self.set_thumbnail(page, self.thumbnail_path)
@@ -196,7 +242,7 @@ class KSVideo(object):
                 await asyncio.sleep(1)
 
         await context.storage_state(path=self.account_file)  # 保存cookie
-        kuaishou_logger.info('cookie更新完毕！')
+        kuaishou_logger.info("cookie更新完毕！")
         await asyncio.sleep(2)  # 这里延迟是为了方便眼睛直观的观看
         # 关闭浏览器上下文和浏览器实例
         await context.close()
@@ -209,11 +255,18 @@ class KSVideo(object):
     async def set_schedule_time(self, page, publish_date):
         kuaishou_logger.info("click schedule")
         publish_date_hour = publish_date.strftime("%Y-%m-%d %H:%M:%S")
-        await page.locator("label:text('发布时间')").locator('xpath=following-sibling::div').locator(
-            '.ant-radio-input').nth(1).click()
+        await (
+            page.locator("label:text('发布时间')")
+            .locator("xpath=following-sibling::div")
+            .locator(".ant-radio-input")
+            .nth(1)
+            .click()
+        )
         await asyncio.sleep(1)
 
-        await page.locator('div.ant-picker-input input[placeholder="选择日期时间"]').click()
+        await page.locator(
+            'div.ant-picker-input input[placeholder="选择日期时间"]'
+        ).click()
         await asyncio.sleep(1)
 
         await page.keyboard.press("Control+KeyA")
@@ -225,38 +278,38 @@ class KSVideo(object):
         """设置视频封面图片"""
         if not thumbnail_path:
             return
-            
+
         try:
-            kuaishou_logger.info('  [-] 正在设置视频封面...')
-            
+            kuaishou_logger.info("  [-] 正在设置视频封面...")
+
             # 尝试多种选择器来定位封面上传区域
             cover_selectors = [
                 'div[class*="cover-upload"]',
                 'div[class*="thumbnail-upload"]',
                 'div[class*="cover"] input[type="file"]',
                 'input[type="file"][accept*="image"]',
-                'div.cover-uploader',
-                'div.upload-cover',
-                'div.cover-upload-area',
-                'div.upload-area',
+                "div.cover-uploader",
+                "div.upload-cover",
+                "div.cover-upload-area",
+                "div.upload-area",
                 'div[role="button"][aria-label*="封面"]',
                 'button:has-text("上传封面")',
                 'button:has-text("选择封面")',
-                'div:has-text("封面") input[type="file"]'
+                'div:has-text("封面") input[type="file"]',
             ]
-            
+
             cover_found = False
             for selector in cover_selectors:
                 try:
                     # 等待页面稳定
                     await page.wait_for_timeout(1000)
-                    
+
                     # 检查元素是否存在
                     locator = page.locator(selector)
                     element_count = await locator.count()
                     if element_count > 0:
-                        kuaishou_logger.info(f'  [-] 找到封面选择器: {selector}')
-                        
+                        kuaishou_logger.info(f"  [-] 找到封面选择器: {selector}")
+
                         if 'input[type="file"]' in selector:
                             # 直接是文件输入框
                             await locator.set_input_files(thumbnail_path)
@@ -264,7 +317,7 @@ class KSVideo(object):
                             # 先点击元素，然后上传文件
                             await locator.click()
                             await page.wait_for_timeout(500)
-                            
+
                             # 尝试找到文件输入框
                             file_inputs = await page.locator('input[type="file"]').all()
                             if file_inputs:
@@ -276,18 +329,18 @@ class KSVideo(object):
                                     await locator.click()
                                 file_chooser = await fc_info.value
                                 await file_chooser.set_files(thumbnail_path)
-                        
-                        kuaishou_logger.info('  [+] 视频封面设置完成！')
+
+                        kuaishou_logger.info("  [+] 视频封面设置完成！")
                         await page.wait_for_timeout(2000)  # 等待封面处理完成
                         cover_found = True
                         break
-                        
+
                 except Exception as e:
-                    kuaishou_logger.debug(f'  [-] 选择器 {selector} 失败: {e}')
+                    kuaishou_logger.debug(f"  [-] 选择器 {selector} 失败: {e}")
                     continue
-            
+
             if not cover_found:
-                kuaishou_logger.warning('  [-] 未找到封面上传区域，跳过封面设置')
-                
+                kuaishou_logger.warning("  [-] 未找到封面上传区域，跳过封面设置")
+
         except Exception as e:
-            kuaishou_logger.warning(f'  [-] 设置封面失败: {e}，继续发布流程')
+            kuaishou_logger.warning(f"  [-] 设置封面失败: {e}，继续发布流程")
