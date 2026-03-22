@@ -193,6 +193,8 @@ class BaiJiaHaoVideo(object):
             "https://baijiahao.baidu.com/builder/rc/edit?type=videoV2", timeout=60000
         )
 
+        # 上传前等待5秒
+        await asyncio.sleep(5)
         # 点击 "上传视频" 按钮
         await page.locator("div[class^='video-main-container'] input").set_input_files(
             self.file_path
@@ -377,6 +379,22 @@ class BaiJiaHaoVideo(object):
 
     async def add_title_tags(self, page):
         try:
+            # 先填写描述（清空默认内容后填写）
+            desc_textarea = page.locator("textarea#desc")
+            if await desc_textarea.count():
+                baijiahao_logger.info("找到描述输入框")
+                # 清空默认内容
+                await desc_textarea.click()
+                await asyncio.sleep(0.3)
+                await page.keyboard.press("Control+KeyA")
+                await page.keyboard.press("Delete")
+                await asyncio.sleep(0.3)
+                # 填写描述
+                if self.description:
+                    await desc_textarea.fill(self.description)
+                    baijiahao_logger.info(f"已填写描述: {self.description[:50]}...")
+                await asyncio.sleep(0.5)
+
             # 定位标题容器（使用aria-placeholder和contenteditable属性）
             title_container = page.locator(
                 '[contenteditable="true"][aria-placeholder="添加标题获得更多推荐"]'
