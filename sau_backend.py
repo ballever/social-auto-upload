@@ -1,3 +1,9 @@
+import sys
+import io
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 import asyncio
 import os
 import sqlite3
@@ -146,7 +152,7 @@ def get_file():
 
 @app.route("/uploadSave", methods=["POST"])
 def upload_save():
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"[uploadSave] 请求方法: {request.method}")
     print(f"[uploadSave] 内容类型: {request.content_type}")
     print(f"[uploadSave] request.files 类型: {type(request.files)}")
@@ -158,7 +164,7 @@ def upload_save():
     print(f"[uploadSave] request.form 内容: {dict(request.form)}")
     print(f"[uploadSave] request.data 长度: {len(request.data)}")
     print(f"[uploadSave] request.data 前100字节: {request.data[:100]}")
-    print(f"{'='*50}\n")
+    print(f"{'=' * 50}\n")
 
     if "file" not in request.files:
         print(f"[uploadSave] 错误: request.files 中没有 'file' 键")
@@ -220,6 +226,7 @@ def upload_save():
 
     except Exception as e:
         import traceback
+
         print(f"[uploadSave] 上传失败: {str(e)}")
         print(f"[uploadSave] 错误类型: {type(e).__name__}")
         print("[uploadSave] 完整堆栈:")
