@@ -232,8 +232,9 @@ async def baijiahao_cookie_gen(id, status_queue):
                     await context.close()
                     await browser.close()
                     return None
-                insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
-                status_queue.put("200")
+                user_id = insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
+                print(f"✅ 用户ID: {user_id}")
+                status_queue.put(f"200:{user_id}")
                 return
 
         # 需要登录，点击登录按钮
@@ -298,8 +299,8 @@ async def baijiahao_cookie_gen(id, status_queue):
         await browser.close()
 
         # 插入用户信息
-        insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")
 
 
 # 抖音登录
@@ -366,8 +367,8 @@ async def douyin_cookie_gen(id, status_queue):
         await context.close()
         await browser.close()
         # 使用辅助函数插入用户信息（避免重复创建）
-        insert_user_info_if_not_exists(3, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(3, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")
 
 
 # 视频号登录
@@ -443,8 +444,8 @@ async def get_tencent_cookie(id, status_queue):
         await browser.close()
 
         # 使用辅助函数插入用户信息（避免重复创建）
-        insert_user_info_if_not_exists(2, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(2, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")
 
 
 # 快手登录
@@ -521,8 +522,8 @@ async def get_ks_cookie(id, status_queue):
         await browser.close()
 
         # 使用辅助函数插入用户信息（避免重复创建）
-        insert_user_info_if_not_exists(4, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(4, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")
 
 
 # 小红书登录
@@ -597,8 +598,8 @@ async def xiaohongshu_cookie_gen(id, status_queue):
         await browser.close()
 
         # 使用辅助函数插入用户信息（避免重复创建）
-        insert_user_info_if_not_exists(1, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(1, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")
 
 
 # Bilibili登录
@@ -645,8 +646,8 @@ async def bilibili_cookie_gen(id, status_queue):
             await context.close()
             await browser.close()
             # 使用辅助函数插入用户信息（避免重复创建）
-            insert_user_info_if_not_exists(5, f"{uuid_v1}.json", id, 1)
-            status_queue.put("200")
+            user_id = insert_user_info_if_not_exists(5, f"{uuid_v1}.json", id, 1)
+            status_queue.put(f"200:{user_id}")
             return
 
         # 需要登录，获取二维码
@@ -721,8 +722,8 @@ async def bilibili_cookie_gen(id, status_queue):
         await browser.close()
 
         # 使用辅助函数插入用户信息（避免重复创建）
-        insert_user_info_if_not_exists(5, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(5, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")
 
 
 # 百家号登录（旧版，保留备用）
@@ -763,8 +764,8 @@ async def _baijiahao_cookie_gen_legacy(id, status_queue):
             # await context.close()
             # await browser.close()
             # 使用辅助函数插入用户信息（避免重复创建）
-            insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
-            status_queue.put("200")
+            user_id = insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
+            status_queue.put(f"200:{user_id}")
             return
 
         # 需要登录，先点击登录按钮
@@ -838,5 +839,5 @@ async def _baijiahao_cookie_gen_legacy(id, status_queue):
         await browser.close()
 
         # 使用辅助函数插入用户信息（避免重复创建）
-        insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
-        status_queue.put("200")
+        user_id = insert_user_info_if_not_exists(6, f"{uuid_v1}.json", id, 1)
+        status_queue.put(f"200:{user_id}")

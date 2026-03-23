@@ -56,26 +56,24 @@
 
 因为我自己也在创业，每天时间都用不完
 
-目前问题主要集中在
-1. 小红书部分，这部分是直接适用xhs这个库来实现的
-2. web 端（vue版本），这个版本是群友LeeDebug他帮忙做的（再次感谢他）
+ 目前问题主要集中在小红书部分，这部分是直接适用xhs这个库来实现的
 
-因为我日常也在用，我用的不是web端，而是最初`uploader`文件夹里的版本，也就是文档里提到的部分https://sap-doc.nasdaddy.com/
+因为我日常在用，文档参考 https://sap-doc.nasdaddy.com/
 所以这里一般遇到的问题，我都会尝试去解决，一并推送到该仓库
 
-目前能遇到的问题，基本上都比较小，可能是元素变化导致的
-在初期设计的时候，其实我已经参考了某些不可变元素去选择，极大的避免了后期因为平台页面修改导致的元素变化
+ 目前能遇到的问题，基本上都比较小，可能是元素变化导致的
+ 在初期设计的时候，其实我已经参考了某些不可变元素去选择，极大的避免了后期因为平台页面修改导致的元素变化
 
-该项目不仅仅是技术人员，有不少是非技术的从业人员，他们是没能力修复一个简单弱小的bug
-为了能帮助更多的人，所以呼吁**技术小伙伴**
+ 该项目不仅仅是技术人员，有不少是非技术的从业人员，他们是没能力修复一个简单弱小的bug
+ 为了能帮助更多的人，所以呼吁**技术小伙伴**
 
-如果大家
+ 如果大家
 - 修复了一些bug
 - 增加一些对大家有帮助的功能
 
-请积极的提出pr，我会想尽可能的确认后合并的，在此感谢大家对于开源项目的支持，帮助更多的人
+ 请积极的提出pr，我会想尽可能的确认后合并的，在此感谢大家对于开源项目的支持，帮助更多的人
 
-我自己也会尽100%的力量，在自己项目稳定后，修bug，加更多的平台，开发出gradio版本（更易部署），大家谅解
+ 我自己也会尽100%的力量，在自己项目稳定后，修bug，加更多的平台，开发出gradio版本（更易部署），大家谅解
 
 ---
 
@@ -130,15 +128,6 @@
     python sau_backend.py
     ```
     后端项目将在 `http://localhost:5409` 启动。
-
-7.  **启动前端项目**:
-    ```bash
-    cd sau_frontend
-    npm install
-    npm run dev
-    ```
-    前端项目将在 `http://localhost:5173` 启动，在浏览器中打开此链接即可访问。
-
 
 > 非程序员用户可以参考：[新手级教程](https://juejin.cn/post/7372114027840208911)
 
@@ -225,25 +214,6 @@
         <a href="https://sap-doc.nasdaddy.com/" title="Documentation">📖</a>
         <br />
         如果您觉得项目有用，可以考虑打赏支持一下
-    </td>
-</table>
-
-### Active Core Team
-
-<table>
-    <td align="center">
-        <a href="https://leedebug.github.io/">
-            <img src="media/edan-qrcode.png" width="200px" alt="Edan Lee"/>
-            <br />
-            <sub><b>Edan Lee</b></sub>
-        </a>
-        <br />
-        <a href="https://github.com/dreammis/social-auto-upload/commits?author=LeeDebug" title="Code">💻</a>
-        <a href="https://leedebug.github.io/" title="Documentation">📖</a>
-        <br />
-        封装了 api 接口和 web 前端管理界面
-        <br />
-        （请注明来意：进群、学习、企业咨询等）
     </td>
 </table>
 
