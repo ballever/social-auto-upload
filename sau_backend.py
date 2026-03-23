@@ -146,13 +146,33 @@ def get_file():
 
 @app.route("/uploadSave", methods=["POST"])
 def upload_save():
+    print(f"\n{'='*50}")
+    print(f"[uploadSave] 请求方法: {request.method}")
+    print(f"[uploadSave] 内容类型: {request.content_type}")
+    print(f"[uploadSave] request.files 类型: {type(request.files)}")
+    print(f"[uploadSave] request.files 是否为空: {len(request.files) == 0}")
+    print(f"[uploadSave] request.files 长度: {len(request.files)}")
+    print(f"[uploadSave] request.files keys: {list(request.files.keys())}")
+    print(f"[uploadSave] request.form 类型: {type(request.form)}")
+    print(f"[uploadSave] request.form keys: {list(request.form.keys())}")
+    print(f"[uploadSave] request.form 内容: {dict(request.form)}")
+    print(f"[uploadSave] request.data 长度: {len(request.data)}")
+    print(f"[uploadSave] request.data 前100字节: {request.data[:100]}")
+    print(f"{'='*50}\n")
+
     if "file" not in request.files:
+        print(f"[uploadSave] 错误: request.files 中没有 'file' 键")
+        print(f"[uploadSave] 实际 keys: {list(request.files.keys())}")
         return jsonify(
             {"code": 400, "data": None, "msg": "No file part in the request"}
         ), 400
 
     file = request.files["file"]
+    print(f"[uploadSave] 文件名: {file.filename}")
+    print(f"[uploadSave] 文件大小: {file.content_length}")
+
     if file.filename == "":
+        print(f"[uploadSave] 错误: 文件名为空")
         return jsonify({"code": 400, "data": None, "msg": "No selected file"}), 400
 
     # 获取表单中的自定义文件名（可选）
@@ -199,7 +219,11 @@ def upload_save():
         ), 200
 
     except Exception as e:
-        print(f"Upload failed: {e}")
+        import traceback
+        print(f"[uploadSave] 上传失败: {str(e)}")
+        print(f"[uploadSave] 错误类型: {type(e).__name__}")
+        print("[uploadSave] 完整堆栈:")
+        traceback.print_exc()
         return jsonify({"code": 500, "msg": f"upload failed: {e}", "data": None}), 500
 
 
