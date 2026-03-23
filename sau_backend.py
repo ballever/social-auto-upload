@@ -41,6 +41,7 @@ from myUtils.postVideo import (
 )
 
 active_queues = {}
+publish_queues = {}
 app = Flask(__name__)
 
 # 允许所有来源跨域访问
@@ -921,6 +922,243 @@ def postVideoBatch():
                 )
     # 返回响应给客户端
     return jsonify({"code": 200, "msg": None, "data": None}), 200
+
+
+@app.route("/startPublish", methods=["POST"])
+def startPublish():
+    import json
+
+    data_list = request.get_json()
+    task_id = str(uuid.uuid1())
+
+    if not isinstance(data_list, list):
+        return jsonify({"code": 400, "msg": "Expected a JSON array", "data": None}), 400
+
+    status_queue = Queue()
+    publish_queues[task_id] = status_queue
+
+    def run_publish():
+        try:
+            status_queue.put(
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "started",
+                        "progress": 0,
+                        "message": "开始发布任务...",
+                    }
+                )
+            )
+
+            total = len(data_list)
+            for idx, data in enumerate(data_list):
+                file_list = data.get("fileList", [])
+                account_list = data.get("accountList", [])
+                type = data.get("type")
+                title = data.get("title")
+                tags = data.get("tags")
+                category = data.get("category")
+                enableTimer = data.get("enableTimer")
+                if category == 0:
+                    category = None
+                productLink = data.get("productLink", "")
+                productTitle = data.get("productTitle", "")
+                thumbnail_path = data.get("thumbnail", "")
+                is_draft = data.get("isDraft", False)
+                description = data.get("description", "")
+                videos_per_day = data.get("videosPerDay")
+                daily_times = data.get("dailyTimes")
+                start_days = data.get("startDays")
+
+                platform_name = {
+                    1: "小红书",
+                    2: "视频号",
+                    3: "抖音",
+                    4: "快手",
+                    5: "Bilibili",
+                    6: "百家号",
+                }.get(type, "未知平台")
+
+                status_queue.put(
+                    json.dumps(
+                        {
+                            "task_id": task_id,
+                            "status": "processing",
+                            "progress": int((idx / total) * 80),
+                            "message": f"正在处理第 {idx + 1}/{total} 个任务: {platform_name}",
+                        }
+                    )
+                )
+
+                match type:
+                    case 1:
+                        post_video_xhs(
+                            title,
+                            file_list,
+                            tags,
+                            account_list,
+                            category,
+                            enableTimer,
+                            videos_per_day,
+                            daily_times,
+                            start_days,
+                            description,
+                            thumbnail_path,
+                        )
+                    case 2:
+                        post_video_tencent(
+                            title,
+                            file_list,
+                            tags,
+                            account_list,
+                            category,
+                            enableTimer,
+                            videos_per_day,
+                            daily_times,
+                            start_days,
+                            is_draft,
+                            description,
+                            thumbnail_path,
+                        )
+                    case 3:
+                        post_video_DouYin(
+                            title,
+                            file_list,
+                            tags,
+                            account_list,
+                            category,
+                            enableTimer,
+                            videos_per_day,
+                            daily_times,
+                            start_days,
+                            thumbnail_path,
+                            productLink,
+                            productTitle,
+                            description,
+                        )
+                    case 4:
+                        post_video_ks(
+                            title,
+                            file_list,
+                            tags,
+                            account_list,
+                            category,
+                            enableTimer,
+                            videos_per_day,
+                            daily_times,
+                            start_days,
+                            description,
+                            thumbnail_path,
+                        )
+                    case 5:
+                        post_video_bilibili(
+                            title,
+                            file_list,
+                            tags,
+                            account_list,
+                            category,
+                            enableTimer,
+                            videos_per_day,
+                            daily_times,
+                            start_days,
+                            description,
+                            thumbnail_path,
+                        )
+                    case 6:
+                        post_video_baijiahao(
+                            title,
+                            file_list,
+                            tags,
+                            account_list,
+                            category,
+                            enableTimer,
+                            videos_per_day,
+                            daily_times,
+                            start_days,
+                            description,
+                            thumbnail_path,
+                        )
+
+                status_queue.put(
+                    json.dumps(
+                        {
+                            "task_id": task_id,
+                            "status": "item_completed",
+                            "progress": int(((idx + 1) / total) * 100),
+                            "message": f"第 {idx + 1}/{total} 个任务完成",
+                        }
+                    )
+                )
+
+            status_queue.put(
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "completed",
+                        "progress": 100,
+                        "message": "所有任务完成!",
+                    }
+                )
+            )
+
+        except Exception as e:
+            status_queue.put(
+                json.dumps(
+                    {
+                        "task_id": task_id,
+                        "status": "error",
+                        "progress": 0,
+                        "message": f"发生错误: {str(e)}",
+                    }
+                )
+            )
+        finally:
+            status_queue.put(json.dumps({"task_id": task_id, "status": "done"}))
+            if task_id in publish_queues:
+                del publish_queues[task_id]
+
+    thread = threading.Thread(target=run_publish, daemon=True)
+    thread.start()
+
+    return jsonify(
+        {"code": 200, "msg": "任务已启动", "data": {"task_id": task_id}}
+    ), 200
+
+
+@app.route("/publishStatus", methods=["GET"])
+def publishStatus():
+    task_id = request.args.get("task_id")
+
+    if not task_id:
+        return jsonify({"code": 400, "msg": "task_id is required", "data": None}), 400
+
+    if task_id not in publish_queues:
+        return jsonify({"code": 404, "msg": "Task not found", "data": None}), 404
+
+    status_queue = publish_queues[task_id]
+
+    def sse_stream():
+        while True:
+            if not status_queue.empty():
+                msg = status_queue.get()
+                yield f"data: {msg}\n\n"
+                import json
+
+                try:
+                    data = json.loads(msg)
+                    if data.get("status") == "done":
+                        break
+                except:
+                    pass
+            time.sleep(0.1)
+        time.sleep(0.5)
+
+    response = Response(sse_stream(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Content-Type"] = "text/event-stream"
+    response.headers["Connection"] = "keep-alive"
+    return response
 
 
 # Cookie文件上传API
