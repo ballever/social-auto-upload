@@ -181,23 +181,42 @@ async def wait_baijiahao_login_success(page, timeout=200):
     import time
 
     start_time = time.time()
+    navigation_done = asyncio.Event()
+    original_url = page.url
 
-    while time.time() - start_time < timeout:
-        # 检查安全验证弹窗
-        if await page.locator("div.passMod_dialog-container:visible").count():
-            raise Exception("出现百度安全验证，请手动处理后重新运行")
+    def handle_navigation():
+        if page.url != original_url:
+            navigation_done.set()
 
-        # 检查是否跳转到创作者中心
-        if "builder/rc" in page.url:
-            print("✅ 检测到跳转到创作者中心")
-            return True
+    page.on("navigate", handle_navigation)
+    page.on("framenavigated", handle_navigation)
 
-        # 检查登录按钮是否消失
-        if await page.get_by_text("登录/注册百家号").count() == 0:
-            print("✅ 登录按钮已消失，登录成功")
-            return True
+    try:
+        while time.time() - start_time < timeout:
+            try:
+                if await page.locator("div.passMod_dialog-container:visible").count():
+                    raise Exception("出现百度安全验证，请手动处理后重新运行")
 
-        await asyncio.sleep(1)
+                if "builder/rc" in page.url:
+                    print("✅ 检测到跳转到创作者中心")
+                    return True
+
+                if await page.get_by_text("登录/注册百家号").count() == 0:
+                    print("✅ 登录按钮已消失，登录成功")
+                    return True
+
+                await asyncio.sleep(1)
+            except Exception as e:
+                if "Execution context was destroyed" in str(
+                    e
+                ) or "Target closed" in str(e):
+                    print("⚠️ 检测到页面上下文销毁，尝试重新获取页面状态...")
+                    await asyncio.sleep(2)
+                    continue
+                raise
+    finally:
+        page.off("navigate", handle_navigation)
+        page.off("framenavigated", handle_navigation)
 
     return False
 
@@ -264,7 +283,8 @@ async def baijiahao_cookie_gen(id, status_queue):
         # 等待登录成功
         print("✅ 等待用户扫码登录...")
         try:
-            if not await wait_baijiahao_login_success(page):
+            login_success = await wait_baijiahao_login_success(page)
+            if not login_success:
                 print("❌ 登录超时")
                 status_queue.put("500")
                 await page.close()
@@ -272,7 +292,31 @@ async def baijiahao_cookie_gen(id, status_queue):
                 await browser.close()
                 return None
         except Exception as e:
-            print(f"❌ 登录失败: {e}")
+            error_msg = str(e)
+            if (
+                "Execution context was destroyed" in error_msg
+                or "Target closed" in error_msg
+            ):
+                print("⚠️ 页面上下文销毁，尝试检查登录状态...")
+                if (
+                    "builder/rc" in page.url
+                    or await page.get_by_text("登录/注册百家号").count() == 0
+                ):
+                    print("✅ 登录成功（通过上下文销毁检测）")
+                else:
+                    print(f"❌ 登录失败: {e}")
+                    status_queue.put("500")
+                    await page.close()
+                    await context.close()
+                    await browser.close()
+                    return None
+            else:
+                print(f"❌ 登录失败: {e}")
+                status_queue.put("500")
+                await page.close()
+                await context.close()
+                await browser.close()
+                return None
             status_queue.put("500")
             await page.close()
             await context.close()
