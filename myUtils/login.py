@@ -212,11 +212,16 @@ async def wait_baijiahao_login_success(page, timeout=200):
                 ) or "Target closed" in str(e):
                     print("⚠️ 检测到页面上下文销毁，尝试重新获取页面状态...")
                     await asyncio.sleep(2)
+                    if "builder/rc" in page.url:
+                        return True
                     continue
                 raise
     finally:
-        page.off("navigate", handle_navigation)
-        page.off("framenavigated", handle_navigation)
+        try:
+            page.remove_listener("navigate", handle_navigation)
+            page.remove_listener("framenavigated", handle_navigation)
+        except Exception:
+            pass
 
     return False
 

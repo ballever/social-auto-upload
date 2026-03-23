@@ -6,11 +6,10 @@ ECHO  Starting social-auto-upload Servers...
 ECHO ==================================================
 ECHO.
 
-ECHO [1/2] Starting Python Backend Server in a new window...
-REM The START command launches a new process.
-REM The first quoted string "SAU Backend" is the title of the new window.
-REM cmd /k runs the command and keeps the window open to show logs.
-START "SAU Backend" cmd /k "python sau_backend.py"
+ECHO [1/2] Starting Python Backend Server (Conda Env) in a new window...
+
+:: 启动新窗口 → 激活 conda → 运行后端
+START "SAU Backend" cmd /k "conda activate social-auto-upload && python sau_backend.py"
 
 ECHO.
 ECHO ==================================================
